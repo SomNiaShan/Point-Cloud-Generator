@@ -29,11 +29,13 @@ mainGrid.ColumnSpacing = 14;
 controlPanel = uipanel(mainGrid, 'Title', 'Generator Settings');
 controlPanel.Layout.Row = 1;
 controlPanel.Layout.Column = 1;
+controlPanel.Scrollable = 'on';
 
 controlGrid = uigridlayout(controlPanel, [4, 1]);
-controlGrid.RowHeight = {465, 210, 88, 145};
+controlGrid.RowHeight = {'fit', 'fit', 'fit', 'fit'};
 controlGrid.RowSpacing = 10;
 controlGrid.Padding = [10, 10, 10, 10];
+controlGrid.Scrollable = 'on';
 
 ui = struct();
 
@@ -51,14 +53,14 @@ latticeGrid.Padding = [10, 10, 10, 10];
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
-    latticeGrid, 'Counts', {'Points X', 'Points Y', 'Points Z'}, [66, round(66 * 1.155), 1]);
+    latticeGrid, 'Counts', {'Points X', 'Points Y', 'Points Z'}, [20, 20, 5]);
 ui.CountsPanel.Layout.Row = 2;
 ui.PointsXField = countFields(1);
 ui.PointsYField = countFields(2);
 ui.PointsZField = countFields(3);
 
 [ui.CartesianPitchPanel, cartesianPitchFields] = createValuePanel( ...
-    latticeGrid, 'Pitch (um)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [3, 3, 75]);
+    latticeGrid, 'Pitch (um)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [2, 2, 10]);
 ui.CartesianPitchPanel.Layout.Row = 3;
 ui.PitchXField = cartesianPitchFields(1);
 ui.PitchYField = cartesianPitchFields(2);
@@ -93,7 +95,7 @@ powerGrid.RowSpacing = 8;
 powerGrid.Padding = [8, 8, 8, 8];
 
 [ui.PowerModeRow, ui.PowerModeDropDown] = createDropdownRow( ...
-    powerGrid, 'Power Mode', {'Fixed value', 'Custom formula', 'Linear points'}, 'Fixed value', @onPowerModeChanged);
+    powerGrid, 'Power Mode', {'Fixed value', 'Custom formula', 'Linear points'}, 'Linear points', @onPowerModeChanged);
 ui.PowerModeRow.Layout.Row = 1;
 
 [ui.FixedPowerRow, ui.FixedPowerField] = createNumericRow(powerGrid, 'Fixed P (%)', 10);
@@ -110,7 +112,7 @@ powerPointsGrid = uigridlayout(ui.PowerPointsPanel, [1, 1]);
 powerPointsGrid.Padding = [8, 8, 8, 8];
 
 ui.PowerPointsArea = uitextarea(powerPointsGrid, ...
-    'Value', {'0, 10'; '100, 10'; '200, 10'});
+    'Value', {'0, 10'; '30, 20'});
 ui.PowerPointsArea.Layout.Row = 1;
 ui.PowerPointsArea.Layout.Column = 1;
 
@@ -136,7 +138,7 @@ ui.TraversalNoteLabel.Layout.Row = 1;
 ui.TraversalNoteLabel.Layout.Column = 1;
 
 [ui.PathModeRow, ui.PathModeDropDown] = createDropdownRow( ...
-    orderingGrid, 'In-layer Path', {'Row-major', 'Serpentine'}, 'Serpentine', []);
+    orderingGrid, 'In-layer Path', {'Row-major', 'Serpentine'}, 'Row-major', []);
 ui.PathModeRow.Layout.Row = 2;
 
 ui.OutputPanel = uipanel(controlGrid, 'Title', 'Output');
