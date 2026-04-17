@@ -2,12 +2,14 @@ function fig = point_cloud_generator_app()
 %POINT_CLOUD_GENERATOR_APP Launch the point cloud generator app.
 
 baseFolder = fileparts(mfilename('fullpath'));
-generatorFolder = fullfile(baseFolder, 'Coordinate generator');
 
-if exist(fullfile(generatorFolder, 'point_cloud_generator_app_impl.m'), 'file') ~= 2
-    error('Coordinate generator app implementation was not found.');
+if exist(fullfile(baseFolder, 'point_cloud_generator_app_impl.m'), 'file') ~= 2
+    error('point_cloud_generator_app_impl.m was not found in the repository root.');
 end
 
-addpath(generatorFolder);
+if exist('point_cloud_generator_app_impl', 'file') ~= 2
+    addpath(baseFolder);
+end
+
 fig = point_cloud_generator_app_impl();
 end

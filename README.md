@@ -10,8 +10,10 @@ Standalone MATLAB repository for coordinate-generator tools used by the laser wr
 - `frame_coordinate_generator.m`: launches the frame generator script
 - `hexagon_matrix_coordinate_generator.m`: launches the hexagon matrix generator script
 - `square_matrix_coordinate_generator.m`: launches the square matrix generator script
-
-Core implementations live in the `Coordinate generator/` folder.
+- `generate_point_cloud.m`: core point-cloud generation logic
+- `generate_hexagon_point_cloud.m`: core hexagon point-cloud generation logic
+- `depth2powerMgF2.m`: helper for the MgF2 depth-to-power model
+- `*_app_impl.m`: app implementation files used by the UI launchers
 
 ## Quick start
 
@@ -22,4 +24,5 @@ Core implementations live in the `Coordinate generator/` folder.
 ## Notes
 
 - Generated `.txt` and `.csv` outputs are ignored by git.
+- All MATLAB source files now live directly in the repository root.
 - The repository is separated from the main laser-writing app so it can be shared independently.
