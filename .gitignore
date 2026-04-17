@@ -1,0 +1,7 @@
+*.asv
+*.txt
+*.csv
+
+!.gitignore
+!README.md
+!Coordinate generator/*.m
