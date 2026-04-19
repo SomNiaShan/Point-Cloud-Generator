@@ -21,6 +21,14 @@ Standalone MATLAB repository for coordinate-generator tools used by the laser wr
 2. Make sure the Current Folder is the repository root.
 3. Run one of the launcher files from the root folder.
 
+## Packaging
+
+- To build a standalone Windows application for `point_cloud_generator_app.m`, run `build_standalone`.
+- By default, the script creates the executable under `deploy/PointCloudGenerator/build` and an installer under `deploy/PointCloudGenerator/package`.
+- The default packaging mode is the closest thing to a "傻瓜版" delivery: it builds an installer with MATLAB Runtime bundled in.
+- If no matching MATLAB Runtime installer ZIP is cached yet, `build_standalone` will download it automatically and cache it under `%LOCALAPPDATA%\MathWorks\MatlabRuntimeCache\Persistent`.
+- MATLAB Compiler is required. End users do not need MATLAB, but they do need MATLAB Runtime.
+
 ## Notes
 
 - Generated `.txt` and `.csv` outputs are ignored by git.

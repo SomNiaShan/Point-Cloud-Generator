@@ -1,6 +1,7 @@
 *.asv
 *.txt
 *.csv
+deploy/
 
 !.gitignore
 !README.md
