@@ -6,6 +6,13 @@ if ~isstruct(params)
 end
 
 lattice = localRequireStruct(params, 'lattice');
+
+latticeTypeStr = localNormalizeOption(localRequireField(lattice, 'type'));
+if latticeTypeStr == "staircase"
+    [data, prefix, summary] = localGenerateStaircaseFull(lattice);
+    return;
+end
+
 region = localRequireStruct(params, 'region');
 power = localRequireStruct(params, 'power');
 
@@ -62,6 +69,100 @@ summary.pathModeLabel = localPathModeLabel(pathMode);
 summary.powerMode = char(powerMode);
 summary.powerModeLabel = localPowerModeLabel(powerMode);
 summary.layerTraversalLabel = 'Layer-by-layer';
+summary.prefix = prefix;
+end
+
+function [data, prefix, summary] = localGenerateStaircaseFull(lattice)
+nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth count');
+zStartUm = localFiniteScalar(localRequireField(lattice, 'zStartUm'), 'Z Start');
+zStepUm = localFiniteScalar(localRequireField(lattice, 'zStepUm'), 'Z Step');
+if zStepUm == 0
+    error('Z Step must be non-zero.');
+end
+
+nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power count');
+powerStart = localFiniteScalar(localRequireField(lattice, 'powerStart'), 'Power start');
+powerEnd = localFiniteScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
+
+patchNx = localPositiveInteger(localRequireField(lattice, 'patchNx'), 'Patch Nx');
+patchNy = localPositiveInteger(localRequireField(lattice, 'patchNy'), 'Patch Ny');
+pitchXUm = localPositiveScalar(localRequireField(lattice, 'patchPitchXUm'), 'Patch Pitch X');
+pitchYUm = localPositiveScalar(localRequireField(lattice, 'patchPitchYUm'), 'Patch Pitch Y');
+gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Gap X');
+gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Gap Y');
+originXUm = localFiniteScalar(localFieldOrDefault(lattice, 'originXUm', 0), 'Origin X');
+originYUm = localFiniteScalar(localFieldOrDefault(lattice, 'originYUm', 0), 'Origin Y');
+
+if nPowers == 1
+    powerCols = powerStart;
+else
+    powerCols = linspace(powerStart, powerEnd, nPowers);
+end
+
+patchWidth = (patchNx - 1) * pitchXUm;
+patchHeight = (patchNy - 1) * pitchYUm;
+strideX = patchWidth + gapXUm;
+strideY = patchHeight + gapYUm;
+
+totalPoints = nDepths * nPowers * patchNx * patchNy;
+xUm = zeros(totalPoints, 1);
+yUm = zeros(totalPoints, 1);
+zUm = zeros(totalPoints, 1);
+pVals = zeros(totalPoints, 1);
+
+cursor = 1;
+for iDepth = 1:nDepths
+    zVal = zStartUm + (iDepth - 1) * zStepUm;
+    yBase = originYUm + (iDepth - 1) * strideY;
+
+    for iPower = 1:nPowers
+        xBase = originXUm + (iPower - 1) * strideX;
+        pVal = powerCols(iPower);
+
+        for iRow = 1:patchNy
+            yVal = yBase + (iRow - 1) * pitchYUm;
+            xVals = xBase + (0:patchNx - 1) * pitchXUm;
+
+            idx = cursor:(cursor + patchNx - 1);
+            xUm(idx) = xVals(:);
+            yUm(idx) = yVal;
+            zUm(idx) = zVal;
+            pVals(idx) = pVal;
+            cursor = cursor + patchNx;
+        end
+    end
+end
+
+xMm = xUm / 1000;
+yMm = yUm / 1000;
+zMm = zUm / 1000;
+data = [xMm, yMm, zMm, pVals];
+
+prefix = localBuildStaircasePrefix( ...
+    nDepths, nPowers, zStartUm, zStepUm, powerStart, powerEnd, ...
+    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm);
+
+summary = struct();
+summary.pointCount = totalPoints;
+summary.sourcePointCount = totalPoints;
+summary.xRangeMm = [min(xMm), max(xMm)];
+summary.yRangeMm = [min(yMm), max(yMm)];
+summary.zRangeMm = [min(zMm), max(zMm)];
+summary.powerRange = [min(pVals), max(pVals)];
+summary.latticeType = 'staircase';
+summary.latticeLabel = 'Staircase';
+summary.pitchLabel = sprintf('Patch %dx%d, pitch X/Y: %s/%s um, gap X/Y: %s/%s um', ...
+    patchNx, patchNy, ...
+    localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), ...
+    localCompactNumber(gapXUm), localCompactNumber(gapYUm));
+summary.rowSpacingUm = strideY;
+summary.regionMode = 'full_block';
+summary.regionLabel = 'Full Block';
+summary.pathMode = 'row_major';
+summary.pathModeLabel = 'Row-major (fixed)';
+summary.powerMode = 'staircase_columns';
+summary.powerModeLabel = localStaircasePowerModeLabel(nPowers, powerStart, powerEnd);
+summary.layerTraversalLabel = localStaircaseTraversalLabel(zStepUm);
 summary.prefix = prefix;
 end
 
@@ -651,6 +752,46 @@ switch powerMode
         label = 'Depth model';
     otherwise
         label = char(powerMode);
+end
+end
+
+function label = localStaircasePowerModeLabel(nPowers, powerStart, powerEnd)
+if nPowers == 1
+    label = sprintf('Single column (1 level at %s %%)', localCompactNumber(powerStart));
+else
+    label = sprintf('Per column (%d levels, %s to %s %%)', ...
+        nPowers, localCompactNumber(powerStart), localCompactNumber(powerEnd));
+end
+end
+
+function label = localStaircaseTraversalLabel(zStepUm)
+if zStepUm > 0
+    label = 'Deep to shallow (Z ascending)';
+else
+    label = 'Shallow to deep (Z descending)';
+end
+end
+
+function prefix = localBuildStaircasePrefix( ...
+    nDepths, nPowers, zStartUm, zStepUm, powerStart, powerEnd, ...
+    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm)
+powerTag = localBuildStaircasePowerTag(nPowers, powerStart, powerEnd);
+prefix = sprintf([ ...
+    'stair_nd_%d_np_%d_zstart_%s_dz_%s_%s_patch_%dx%d_', ...
+    'px_%s_py_%s_gx_%s_gy_%s_ox_%s_oy_%s'], ...
+    nDepths, nPowers, ...
+    localCompactNumber(zStartUm), localCompactNumber(zStepUm), powerTag, ...
+    patchNx, patchNy, ...
+    localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), ...
+    localCompactNumber(gapXUm), localCompactNumber(gapYUm), ...
+    localCompactNumber(originXUm), localCompactNumber(originYUm));
+end
+
+function powerTag = localBuildStaircasePowerTag(nPowers, powerStart, powerEnd)
+if nPowers == 1
+    powerTag = ['P_', localCompactNumber(powerStart)];
+else
+    powerTag = ['P_', localCompactNumber(powerStart), '_to_', localCompactNumber(powerEnd)];
 end
 end
 

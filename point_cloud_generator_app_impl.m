@@ -43,13 +43,13 @@ ui.LatticePanel = uipanel(controlGrid, 'Title', 'Lattice');
 ui.LatticePanel.Layout.Row = 1;
 ui.LatticePanel.Layout.Column = 1;
 
-latticeGrid = uigridlayout(ui.LatticePanel, [6, 1]);
-latticeGrid.RowHeight = {'fit', 84, 84, 76, 84, 76};
+latticeGrid = uigridlayout(ui.LatticePanel, [12, 1]);
+latticeGrid.RowHeight = {'fit', 84, 84, 76, 84, 76, 84, 84, 76, 76, 76, 76};
 latticeGrid.RowSpacing = 10;
 latticeGrid.Padding = [10, 10, 10, 10];
 
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP'}, 'Cartesian', @onLatticeTypeChanged);
+    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase'}, 'Cartesian', @onLatticeTypeChanged);
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
@@ -84,6 +84,45 @@ ui.OriginZField = originFields(3);
 ui.HcpShiftPanel.Layout.Row = 6;
 ui.AbDxField = hcpShiftFields(1);
 ui.AbDyField = hcpShiftFields(2);
+
+[ui.StepConfigPanel, stepConfigFields] = createValuePanel( ...
+    latticeGrid, 'Steps', {'nDepths', 'Z Start (um)', 'Z Step (um)'}, [5, 0, 50]);
+ui.StepConfigPanel.Layout.Row = 7;
+ui.NDepthsField = stepConfigFields(1);
+ui.ZStartField = stepConfigFields(2);
+ui.ZStepField = stepConfigFields(3);
+ui.ZStepField.ValueChangedFcn = @onStaircaseParamChanged;
+
+[ui.PowerColumnsPanel, powerColumnFields] = createValuePanel( ...
+    latticeGrid, 'Power Columns', {'nPowers', 'P Start (%)', 'P End (%)'}, [6, 5, 30]);
+ui.PowerColumnsPanel.Layout.Row = 8;
+ui.NPowersField = powerColumnFields(1);
+ui.StaircasePowerStartField = powerColumnFields(2);
+ui.StaircasePowerEndField = powerColumnFields(3);
+
+[ui.PatchCountsPanel, patchCountFields] = createValuePanel( ...
+    latticeGrid, 'Patch Counts', {'Patch Nx', 'Patch Ny'}, [5, 5]);
+ui.PatchCountsPanel.Layout.Row = 9;
+ui.PatchNxField = patchCountFields(1);
+ui.PatchNyField = patchCountFields(2);
+
+[ui.PatchPitchPanel, patchPitchFields] = createValuePanel( ...
+    latticeGrid, 'Patch Pitch (um)', {'Pitch X', 'Pitch Y'}, [10, 10]);
+ui.PatchPitchPanel.Layout.Row = 10;
+ui.PatchPitchXField = patchPitchFields(1);
+ui.PatchPitchYField = patchPitchFields(2);
+
+[ui.GapPanel, gapFields] = createValuePanel( ...
+    latticeGrid, 'Gap (um)', {'Gap X', 'Gap Y'}, [20, 20]);
+ui.GapPanel.Layout.Row = 11;
+ui.GapXField = gapFields(1);
+ui.GapYField = gapFields(2);
+
+[ui.StaircaseOriginPanel, stairOriginFields] = createValuePanel( ...
+    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y'}, [0, 0]);
+ui.StaircaseOriginPanel.Layout.Row = 12;
+ui.StaircaseOriginXField = stairOriginFields(1);
+ui.StaircaseOriginYField = stairOriginFields(2);
 
 ui.PowerPanel = uipanel(controlGrid, 'Title', 'Power');
 ui.PowerPanel.Layout.Row = 2;
@@ -240,13 +279,26 @@ onGenerate();
 
     function onLatticeTypeChanged(~, ~)
         latticeType = string(ui.LatticeTypeDropDown.Value);
+        isStaircase = latticeType == "Staircase";
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
 
+        setPanelRow(latticeGrid, 2, ui.CountsPanel, 84, ~isStaircase);
         setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 84, showCartesian);
         setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 76, showHexPitch);
+        setPanelRow(latticeGrid, 5, ui.OriginPanel, 84, ~isStaircase);
         setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 76, showHcpShift);
+        setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 84, isStaircase);
+        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 84, isStaircase);
+        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 76, isStaircase);
+        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 76, isStaircase);
+        setPanelRow(latticeGrid, 11, ui.GapPanel, 76, isStaircase);
+        setPanelRow(latticeGrid, 12, ui.StaircaseOriginPanel, 76, isStaircase);
+
+        setPanelRow(controlGrid, 2, ui.PowerPanel, 'fit', ~isStaircase);
+        setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isStaircase);
+        updateTraversalNote();
     end
 
     function onPowerModeChanged(~, ~)
@@ -273,6 +325,10 @@ onGenerate();
         if ~isempty(state.generatedData) && ~isempty(state.generatedSummary)
             updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary);
         end
+    end
+
+    function onStaircaseParamChanged(~, ~)
+        updateTraversalNote();
     end
 
     function onGenerate(~, ~)
@@ -329,21 +385,39 @@ onGenerate();
         params = struct();
         params.lattice = struct();
         params.lattice.type = latticeType;
-        params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
-        params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
-        params.lattice.hcpShift = struct( ...
-            'dxUm', ui.AbDxField.Value, ...
-            'dyUm', ui.AbDyField.Value);
 
-        if latticeType == "Cartesian"
-            params.lattice.pitch = struct( ...
-                'xUm', ui.PitchXField.Value, ...
-                'yUm', ui.PitchYField.Value, ...
-                'zUm', ui.PitchZCartesianField.Value);
+        if latticeType == "Staircase"
+            params.lattice.nDepths = round(max(1, ui.NDepthsField.Value));
+            params.lattice.zStartUm = ui.ZStartField.Value;
+            params.lattice.zStepUm = ui.ZStepField.Value;
+            params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
+            params.lattice.powerStart = ui.StaircasePowerStartField.Value;
+            params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
+            params.lattice.patchNx = round(max(1, ui.PatchNxField.Value));
+            params.lattice.patchNy = round(max(1, ui.PatchNyField.Value));
+            params.lattice.patchPitchXUm = ui.PatchPitchXField.Value;
+            params.lattice.patchPitchYUm = ui.PatchPitchYField.Value;
+            params.lattice.gapXUm = ui.GapXField.Value;
+            params.lattice.gapYUm = ui.GapYField.Value;
+            params.lattice.originXUm = ui.StaircaseOriginXField.Value;
+            params.lattice.originYUm = ui.StaircaseOriginYField.Value;
         else
-            params.lattice.pitch = struct( ...
-                'xyUm', ui.PitchXYField.Value, ...
-                'zUm', ui.PitchZHexField.Value);
+            params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
+            params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
+            params.lattice.hcpShift = struct( ...
+                'dxUm', ui.AbDxField.Value, ...
+                'dyUm', ui.AbDyField.Value);
+
+            if latticeType == "Cartesian"
+                params.lattice.pitch = struct( ...
+                    'xUm', ui.PitchXField.Value, ...
+                    'yUm', ui.PitchYField.Value, ...
+                    'zUm', ui.PitchZCartesianField.Value);
+            else
+                params.lattice.pitch = struct( ...
+                    'xyUm', ui.PitchXYField.Value, ...
+                    'zUm', ui.PitchZHexField.Value);
+            end
         end
 
         params.region = struct('mode', 'Full Block');
@@ -372,9 +446,10 @@ onGenerate();
                 'LineWidth', 0.35);
         end
 
-        scatter3(ui.PreviewAxes, ...
+        sc = scatter3(ui.PreviewAxes, ...
             plotData(:, 1), plotData(:, 2), plotData(:, 3), ...
             12, plotData(:, 4), 'filled');
+        sc.DataTipTemplate.DataTipRows(end).Label = 'Power (%)';
 
         hold(ui.PreviewAxes, 'off');
         grid(ui.PreviewAxes, 'on');
@@ -412,6 +487,26 @@ onGenerate();
             summary.zRangeMm(1), summary.zRangeMm(2), ...
             summary.powerRange(1), summary.powerRange(2), ...
             plotNote, previewRows);
+    end
+
+    function updateTraversalNote()
+        if string(ui.LatticeTypeDropDown.Value) ~= "Staircase"
+            ui.TraversalNoteLabel.Text = 'Traversal: layer-by-layer (Z ascending).';
+            return;
+        end
+
+        zStepUm = ui.ZStepField.Value;
+        if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm))
+            detailText = 'Staircase requires a finite non-zero Z Step.';
+        elseif zStepUm > 0
+            detailText = 'Deep to shallow (Z ascending).';
+        elseif zStepUm < 0
+            detailText = 'Shallow to deep (Z descending).';
+        else
+            detailText = 'Staircase requires a non-zero Z Step.';
+        end
+
+        ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Row-major within each patch.'];
     end
 end
 
