@@ -42,12 +42,14 @@ if ~(license('test', 'Compiler') || license('test', 'MATLAB_Compiler'))
         'MATLAB Compiler is required to build a standalone application.');
 end
 
-repoRoot = fileparts(mfilename('fullpath'));
+supportFolder = fileparts(mfilename('fullpath'));
+repoRoot = fileparts(supportFolder);
 mainFile = fullfile(repoRoot, 'point_cloud_generator_app.m');
 if exist(mainFile, 'file') ~= 2
     error('build_standalone:MissingMainFile', ...
         'Could not find point_cloud_generator_app.m in the repository root.');
 end
+addpath(supportFolder, '-begin');
 
 parser = inputParser;
 parser.FunctionName = mfilename;

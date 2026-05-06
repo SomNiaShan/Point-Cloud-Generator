@@ -2,6 +2,8 @@
 *.txt
 *.csv
 deploy/
+Output/
+support_files/backup_old_*/
 
 !.gitignore
 !README.md
