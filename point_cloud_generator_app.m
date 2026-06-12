@@ -9,85 +9,104 @@ end
 
 state = struct();
 state.generatedData = [];
+state.generatedPlanTable = table();
 state.generatedPrefix = '';
 state.generatedSummary = struct([]);
+state.previewFromLoadedPlan = false;
 state.lastSaveFolder = appFolder;
 state.maxTablePreviewRows = 5000;
 state.tablePreviewRowLimit = 200;
 state.maxPlotPreviewPoints = 50000;
+tips = parameterTooltips();
+
+figurePosition = compactFigurePosition();
 
 fig = uifigure( ...
     'Name', 'Point Cloud Generator', ...
-    'Position', [60, 20, 1520, 1080], ...
+    'Position', figurePosition, ...
     'Color', [0.97, 0.97, 0.98]);
 
 mainGrid = uigridlayout(fig, [1, 2]);
-mainGrid.ColumnWidth = {480, '1x'};
+mainGrid.ColumnWidth = {560, '1x'};
 mainGrid.RowHeight = {'1x'};
-mainGrid.Padding = [14, 14, 14, 14];
-mainGrid.ColumnSpacing = 14;
+mainGrid.Padding = [10, 10, 10, 10];
+mainGrid.ColumnSpacing = 10;
 
 controlPanel = uipanel(mainGrid, 'Title', 'Generator Settings');
 controlPanel.Layout.Row = 1;
 controlPanel.Layout.Column = 1;
 controlPanel.Scrollable = 'on';
 
-controlGrid = uigridlayout(controlPanel, [4, 1]);
-controlGrid.RowHeight = {'fit', 'fit', 'fit', 'fit'};
-controlGrid.RowSpacing = 10;
-controlGrid.Padding = [10, 10, 10, 10];
-controlGrid.Scrollable = 'on';
+controlPanelGrid = uigridlayout(controlPanel, [2, 1]);
+controlPanelGrid.RowHeight = {'1x', 'fit'};
+controlPanelGrid.ColumnWidth = {'1x'};
+controlPanelGrid.Padding = [6, 6, 6, 6];
+controlPanelGrid.RowSpacing = 6;
+
+controlTabs = uitabgroup(controlPanelGrid);
+controlTabs.Layout.Row = 1;
+controlTabs.Layout.Column = 1;
+latticeTab = uitab(controlTabs, 'Title', 'Lattice');
+latticeTab.Scrollable = 'on';
+powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
+
+latticeTabGrid = uigridlayout(latticeTab, [28, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 28);
+latticeTabGrid.ColumnWidth = {'1x'};
+latticeTabGrid.Padding = [6, 6, 6, 6];
+latticeTabGrid.RowSpacing = 4;
+latticeTabGrid.Scrollable = 'on';
+
+powerOrderGrid = uigridlayout(powerOrderTab, [3, 1]);
+powerOrderGrid.RowHeight = {'fit', 'fit', 'fit'};
+powerOrderGrid.ColumnWidth = {'1x'};
+powerOrderGrid.RowSpacing = 6;
+powerOrderGrid.Padding = [6, 6, 6, 6];
 
 ui = struct();
 
-ui.LatticePanel = uipanel(controlGrid, 'Title', 'Lattice');
-ui.LatticePanel.Layout.Row = 1;
-ui.LatticePanel.Layout.Column = 1;
-
-latticeGrid = uigridlayout(ui.LatticePanel, [12, 1]);
-latticeGrid.RowHeight = {'fit', 84, 84, 76, 84, 76, 84, 84, 76, 76, 76, 76};
-latticeGrid.RowSpacing = 10;
-latticeGrid.Padding = [10, 10, 10, 10];
+latticeGrid = latticeTabGrid;
 
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase'}, 'Cartesian', @onLatticeTypeChanged);
+    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut'}, 'Segmented Grating', @onLatticeTypeChanged, ...
+    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut'}, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
-    latticeGrid, 'Counts', {'Points X', 'Points Y', 'Points Z'}, [20, 20, 5]);
+    latticeGrid, 'Counts', {'Points X', 'Points Y', 'Points Z'}, [20, 20, 5], tips.counts);
 ui.CountsPanel.Layout.Row = 2;
 ui.PointsXField = countFields(1);
 ui.PointsYField = countFields(2);
 ui.PointsZField = countFields(3);
 
 [ui.CartesianPitchPanel, cartesianPitchFields] = createValuePanel( ...
-    latticeGrid, 'Pitch (um)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [2, 2, 10]);
+    latticeGrid, 'Pitch (um)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [2, 2, 10], tips.cartesianPitch);
 ui.CartesianPitchPanel.Layout.Row = 3;
 ui.PitchXField = cartesianPitchFields(1);
 ui.PitchYField = cartesianPitchFields(2);
 ui.PitchZCartesianField = cartesianPitchFields(3);
 
 [ui.HexPitchPanel, hexPitchFields] = createValuePanel( ...
-    latticeGrid, 'Pitch (um)', {'Pitch XY', 'Pitch Z'}, [3, 75]);
+    latticeGrid, 'Pitch (um)', {'Pitch XY', 'Pitch Z'}, [3, 75], tips.hexPitch);
 ui.HexPitchPanel.Layout.Row = 4;
 ui.PitchXYField = hexPitchFields(1);
 ui.PitchZHexField = hexPitchFields(2);
 
 [ui.OriginPanel, originFields] = createValuePanel( ...
-    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, 0]);
+    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, -17.5], tips.origin);
 ui.OriginPanel.Layout.Row = 5;
 ui.OriginXField = originFields(1);
 ui.OriginYField = originFields(2);
 ui.OriginZField = originFields(3);
 
 [ui.HcpShiftPanel, hcpShiftFields] = createValuePanel( ...
-    latticeGrid, 'AB Shift (um)', {'AB dx', 'AB dy'}, [1.5, (sqrt(3) / 6) * 3]);
+    latticeGrid, 'AB Shift (um)', {'AB dx', 'AB dy'}, [1.5, (sqrt(3) / 6) * 3], tips.hcpShift);
 ui.HcpShiftPanel.Layout.Row = 6;
 ui.AbDxField = hcpShiftFields(1);
 ui.AbDyField = hcpShiftFields(2);
 
 [ui.StepConfigPanel, stepConfigFields] = createValuePanel( ...
-    latticeGrid, 'Steps', {'nDepths', 'Z Start (um)', 'Z Step (um)'}, [5, 0, 50]);
+    latticeGrid, 'Depth Steps', {'Depth Count', 'Z Start', 'Z Step'}, [5, 0, 50], tips.stepConfig);
 ui.StepConfigPanel.Layout.Row = 7;
 ui.NDepthsField = stepConfigFields(1);
 ui.ZStartField = stepConfigFields(2);
@@ -95,53 +114,210 @@ ui.ZStepField = stepConfigFields(3);
 ui.ZStepField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.PowerColumnsPanel, powerColumnFields] = createValuePanel( ...
-    latticeGrid, 'Power Columns', {'nPowers', 'P Start (%)', 'P End (%)'}, [6, 5, 30]);
+    latticeGrid, 'Power Columns', {'Power Count', 'P Start', 'P End'}, [6, 5, 30], tips.powerColumns);
 ui.PowerColumnsPanel.Layout.Row = 8;
 ui.NPowersField = powerColumnFields(1);
 ui.StaircasePowerStartField = powerColumnFields(2);
 ui.StaircasePowerEndField = powerColumnFields(3);
 
 [ui.PatchCountsPanel, patchCountFields] = createValuePanel( ...
-    latticeGrid, 'Patch Counts', {'Patch Nx', 'Patch Ny'}, [5, 5]);
+    latticeGrid, 'Patch Counts', {'Nx', 'Ny'}, [5, 5], tips.patchCounts);
 ui.PatchCountsPanel.Layout.Row = 9;
 ui.PatchNxField = patchCountFields(1);
 ui.PatchNyField = patchCountFields(2);
 
 [ui.PatchPitchPanel, patchPitchFields] = createValuePanel( ...
-    latticeGrid, 'Patch Pitch (um)', {'Pitch X', 'Pitch Y'}, [10, 10]);
+    latticeGrid, 'Patch Pitch (um)', {'Pitch X', 'Pitch Y'}, [10, 10], tips.patchPitch);
 ui.PatchPitchPanel.Layout.Row = 10;
 ui.PatchPitchXField = patchPitchFields(1);
 ui.PatchPitchYField = patchPitchFields(2);
 
 [ui.GapPanel, gapFields] = createValuePanel( ...
-    latticeGrid, 'Gap (um)', {'Gap X', 'Gap Y'}, [20, 20]);
+    latticeGrid, 'Gap (um)', {'Gap X', 'Gap Y'}, [20, 20], tips.gap);
 ui.GapPanel.Layout.Row = 11;
 ui.GapXField = gapFields(1);
 ui.GapYField = gapFields(2);
 
 [ui.StaircaseOriginPanel, stairOriginFields] = createValuePanel( ...
-    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y'}, [0, 0]);
+    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y'}, [0, 0], tips.staircaseOrigin);
 ui.StaircaseOriginPanel.Layout.Row = 12;
 ui.StaircaseOriginXField = stairOriginFields(1);
 ui.StaircaseOriginYField = stairOriginFields(2);
 
-ui.PowerPanel = uipanel(controlGrid, 'Title', 'Power');
-ui.PowerPanel.Layout.Row = 2;
+[ui.GratingAxesPanel, gratingAxisDropdowns] = createDropdownPanel( ...
+    latticeGrid, 'Grating Axes', {'Depth Axis', 'Period Axis'}, {'X', 'Y', 'Z'}, {'Z', 'X'}, ...
+    @onGratingAxisChanged, tips.gratingAxes);
+ui.GratingAxesPanel.Layout.Row = 13;
+ui.GratingDepthAxisDropDown = gratingAxisDropdowns(1);
+ui.GratingPeriodAxisDropDown = gratingAxisDropdowns(2);
+
+[ui.GratingDepthPanel, gratingDepthFields] = createValuePanel( ...
+    latticeGrid, 'Grating Depth', {'Layer Count', 'Start', 'Step'}, [1, 0, 10], tips.gratingDepth);
+ui.GratingDepthPanel.Layout.Row = 14;
+ui.GratingDepthCountField = gratingDepthFields(1);
+ui.GratingDepthStartField = gratingDepthFields(2);
+ui.GratingDepthStepField = gratingDepthFields(3);
+ui.GratingDepthStepField.ValueChangedFcn = @onStaircaseParamChanged;
+
+[ui.GratingSegmentOnePanel, gratingSegmentOneFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Grating Segment 1', {'Period', 'Period Count'}, [17.53, 6], 3, tips.gratingSegmentOne);
+ui.GratingSegmentOnePanel.Layout.Row = 15;
+ui.GratingPeriod1Field = gratingSegmentOneFields(1);
+ui.GratingPeriodCount1Field = gratingSegmentOneFields(2);
+
+[ui.GratingSegmentTwoPanel, gratingSegmentTwoFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Grating Segment 2', {'Period', 'Period Count', 'Segment Gap'}, [9.65, 20, 4], 3, tips.gratingSegmentTwo);
+ui.GratingSegmentTwoPanel.Layout.Row = 16;
+ui.GratingPeriod2Field = gratingSegmentTwoFields(1);
+ui.GratingPeriodCount2Field = gratingSegmentTwoFields(2);
+ui.GratingSegmentGapField = gratingSegmentTwoFields(3);
+
+[ui.GratingSlabOnePanel, gratingSlabOneFields] = createValuePanel( ...
+    latticeGrid, 'Slab Segment 1', {'Line Count', 'Line Pitch'}, [8, 1], tips.gratingSlabOne);
+ui.GratingSlabOnePanel.Layout.Row = 17;
+ui.GratingSlabCopies1Field = gratingSlabOneFields(1);
+ui.GratingSlabPitch1Field = gratingSlabOneFields(2);
+
+[ui.GratingSlabTwoPanel, gratingSlabTwoFields] = createValuePanel( ...
+    latticeGrid, 'Slab Segment 2', {'Line Count', 'Line Pitch'}, [4, 1], tips.gratingSlabTwo);
+ui.GratingSlabTwoPanel.Layout.Row = 18;
+ui.GratingSlabCopies2Field = gratingSlabTwoFields(1);
+ui.GratingSlabPitch2Field = gratingSlabTwoFields(2);
+
+[ui.GratingChannelPanel, gratingChannelFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Channel Matrix', {'Rows', 'Columns', 'Row Pitch', 'Column Pitch'}, [5, 5, 8.7, 20], 4, tips.gratingChannel);
+ui.GratingChannelPanel.Layout.Row = 19;
+ui.GratingChannelRowsField = gratingChannelFields(1);
+ui.GratingChannelColsField = gratingChannelFields(2);
+ui.GratingChannelRowPitchField = gratingChannelFields(3);
+ui.GratingChannelColPitchField = gratingChannelFields(4);
+ui.GratingChannelRowsField.ValueChangedFcn = @onGratingChannelMatrixChanged;
+ui.GratingChannelColsField.ValueChangedFcn = @onGratingChannelMatrixChanged;
+
+ui.GratingChannelStartsPanel = uipanel(latticeGrid, 'BorderType', 'none');
+ui.GratingChannelStartsPanel.Layout.Row = 20;
+gratingStartsGrid = uigridlayout(ui.GratingChannelStartsPanel, [4, 1]);
+gratingStartsGrid.RowHeight = {'fit', gratingStartTableHeight(5), 'fit', gratingStartTableHeight(5)};
+gratingStartsGrid.ColumnWidth = {'1x'};
+gratingStartsGrid.Padding = [0, 0, 0, 0];
+gratingStartsGrid.RowSpacing = 4;
+
+ui.GratingSegmentOneStartsLabel = uilabel(gratingStartsGrid, 'Text', 'First Grating Start Positions');
+ui.GratingSegmentOneStartsLabel.Layout.Row = 1;
+ui.GratingSegmentOneStartsLabel.Layout.Column = 1;
+ui.GratingSegmentOneStartsTable = uitable(gratingStartsGrid, ...
+    'Data', { ...
+    '8.7655', '8.7655', '', '0', '0'; ...
+    '8.7655', '0', '', '8.7655', '0'; ...
+    '', '', '', '', ''; ...
+    '0', '8.7655', '', '0', '8.7655'; ...
+    '0', '0', '', '8.7655', '8.7655'}, ...
+    'ColumnName', {'C1', 'C2', 'C3', 'C4', 'C5'}, ...
+    'RowName', {'R1', 'R2', 'R3', 'R4', 'R5'}, ...
+    'ColumnEditable', true(1, 5), ...
+    'ColumnWidth', repmat({54}, 1, 5));
+ui.GratingSegmentOneStartsTable.Layout.Row = 2;
+ui.GratingSegmentOneStartsTable.Layout.Column = 1;
+
+ui.GratingSegmentTwoStartsLabel = uilabel(gratingStartsGrid, 'Text', 'Second Grating Start Positions');
+ui.GratingSegmentTwoStartsLabel.Layout.Row = 3;
+ui.GratingSegmentTwoStartsLabel.Layout.Column = 1;
+ui.GratingSegmentTwoStartsTable = uitable(gratingStartsGrid, ...
+    'Data', { ...
+    '', '114.8250', '114.8250', '114.8250', ''; ...
+    '110', '110', '110', '110', '110'; ...
+    '110', '114.8250', '', '114.8250', '110'; ...
+    '110', '110', '110', '110', '110'; ...
+    '', '114.8250', '114.8250', '114.8250', ''}, ...
+    'ColumnName', {'C1', 'C2', 'C3', 'C4', 'C5'}, ...
+    'RowName', {'R1', 'R2', 'R3', 'R4', 'R5'}, ...
+    'ColumnEditable', true(1, 5), ...
+    'ColumnWidth', repmat({54}, 1, 5));
+ui.GratingSegmentTwoStartsTable.Layout.Row = 4;
+ui.GratingSegmentTwoStartsTable.Layout.Column = 1;
+applyTooltip({ui.GratingChannelStartsPanel, ui.GratingSegmentOneStartsLabel, ui.GratingSegmentOneStartsTable, ...
+    ui.GratingSegmentTwoStartsLabel, ui.GratingSegmentTwoStartsTable}, tips.gratingChannelStarts);
+
+[ui.GratingScanPanel, gratingScanFields] = createValuePanel( ...
+    latticeGrid, 'Scan Line', {'Length'}, 20, tips.gratingScan);
+ui.GratingScanPanel.Layout.Row = 21;
+ui.GratingScanLengthField = gratingScanFields(1);
+ui.GratingScanLengthField.ValueChangedFcn = @onPlanParamChanged;
+
+[ui.ZPushOriginPanel, zPushOriginFields] = createValuePanel( ...
+    latticeGrid, 'Initial Position (um)', {'X0', 'Y0', 'Z0'}, [0, 0, 0], tips.zPushOrigin);
+ui.ZPushOriginPanel.Layout.Row = 22;
+ui.ZPushOriginXField = zPushOriginFields(1);
+ui.ZPushOriginYField = zPushOriginFields(2);
+ui.ZPushOriginZField = zPushOriginFields(3);
+ui.ZPushOriginXField.ValueChangedFcn = @onStaircaseParamChanged;
+ui.ZPushOriginYField.ValueChangedFcn = @onStaircaseParamChanged;
+ui.ZPushOriginZField.ValueChangedFcn = @onStaircaseParamChanged;
+
+[ui.ZPushMovePanel, zPushMoveFields] = createValuePanel( ...
+    latticeGrid, 'XY Move (um)', {'dX', 'dY'}, [0, 0], tips.zPushMove);
+ui.ZPushMovePanel.Layout.Row = 23;
+ui.ZPushMoveXField = zPushMoveFields(1);
+ui.ZPushMoveYField = zPushMoveFields(2);
+ui.ZPushMoveXField.ValueChangedFcn = @onStaircaseParamChanged;
+ui.ZPushMoveYField.ValueChangedFcn = @onStaircaseParamChanged;
+
+[ui.ZPushConfigPanel, zPushConfigFields] = createValuePanel( ...
+    latticeGrid, 'Z Push', {'Count', 'Step (um)', 'Interval s'}, [5, 10, 1], tips.zPushConfig);
+ui.ZPushConfigPanel.Layout.Row = 24;
+ui.ZPushCountField = zPushConfigFields(1);
+ui.ZPushStepField = zPushConfigFields(2);
+ui.ZPushIntervalField = zPushConfigFields(3);
+ui.ZPushCountField.ValueChangedFcn = @onStaircaseParamChanged;
+ui.ZPushStepField.ValueChangedFcn = @onStaircaseParamChanged;
+ui.ZPushIntervalField.ValueChangedFcn = @onStaircaseParamChanged;
+
+[ui.HexCutCenterPanel, hexCutCenterFields] = createValuePanel( ...
+    latticeGrid, 'Cut Center (um)', {'Center X', 'Center Y', 'Center Z'}, [0, 0, 0], tips.hexCutCenter);
+ui.HexCutCenterPanel.Layout.Row = 25;
+ui.HexCutCenterXField = hexCutCenterFields(1);
+ui.HexCutCenterYField = hexCutCenterFields(2);
+ui.HexCutCenterZField = hexCutCenterFields(3);
+
+[ui.HexCutGeometryPanel, hexCutGeometryFields] = createValuePanel( ...
+    latticeGrid, 'Hexagon Geometry', {'Side (um)', 'Rotation (deg)'}, [100, 0], tips.hexCutGeometry);
+ui.HexCutGeometryPanel.Layout.Row = 26;
+ui.HexCutSideLengthField = hexCutGeometryFields(1);
+ui.HexCutRotationField = hexCutGeometryFields(2);
+
+[ui.HexCutDirectionRow, ui.HexCutDirectionDropDown] = createDropdownRow( ...
+    latticeGrid, 'Cut Direction', {'Counter-clockwise', 'Clockwise'}, 'Counter-clockwise', @onStaircaseParamChanged, ...
+    {'Counter-clockwise', 'Clockwise'}, tips.hexCutDirection);
+ui.HexCutDirectionRow.Layout.Row = 27;
+
+[ui.HexCutMotionPanel, hexCutMotionFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Cut Motion', {'Power (%)', 'Speed (mm/s)', 'Accel (mm/s^2)', 'Lead Safety', 'Exit Safety'}, ...
+    [10, 0.01, 1, 1.5, 1], 5, tips.hexCutMotion);
+ui.HexCutMotionPanel.Layout.Row = 28;
+ui.HexCutPowerField = hexCutMotionFields(1);
+ui.HexCutSpeedField = hexCutMotionFields(2);
+ui.HexCutAccelerationField = hexCutMotionFields(3);
+ui.HexCutLeadSafetyField = hexCutMotionFields(4);
+ui.HexCutExitSafetyField = hexCutMotionFields(5);
+
+ui.PowerPanel = uipanel(powerOrderGrid, 'Title', 'Power');
+ui.PowerPanel.Layout.Row = 1;
 ui.PowerPanel.Layout.Column = 1;
 
 powerGrid = uigridlayout(ui.PowerPanel, [5, 1]);
-powerGrid.RowHeight = {'fit', 'fit', 'fit', 100, 'fit'};
-powerGrid.RowSpacing = 8;
-powerGrid.Padding = [8, 8, 8, 8];
+powerGrid.RowHeight = {'fit', 'fit', 'fit', 78, 'fit'};
+powerGrid.RowSpacing = 5;
+powerGrid.Padding = [6, 6, 6, 6];
 
 [ui.PowerModeRow, ui.PowerModeDropDown] = createDropdownRow( ...
-    powerGrid, 'Power Mode', {'Fixed value', 'Custom formula', 'Linear points'}, 'Linear points', @onPowerModeChanged);
+    powerGrid, 'Power Mode', {'Fixed Value', 'Custom Formula', 'Linear Points'}, 'Linear points', @onPowerModeChanged, ...
+    {'Fixed value', 'Custom formula', 'Linear points'}, tips.powerMode);
 ui.PowerModeRow.Layout.Row = 1;
 
-[ui.FixedPowerRow, ui.FixedPowerField] = createNumericRow(powerGrid, 'Fixed P (%)', 10);
+[ui.FixedPowerRow, ui.FixedPowerField] = createNumericRow(powerGrid, 'Fixed Power', 10, tips.fixedPower);
 ui.FixedPowerRow.Layout.Row = 2;
 
-[ui.PowerFormulaRow, ui.PowerFormulaField] = createTextRow(powerGrid, 'Formula', '1+0.005*z');
+[ui.PowerFormulaRow, ui.PowerFormulaField] = createTextRow(powerGrid, 'Formula', '1+0.005*z', tips.powerFormula);
 ui.PowerFormulaRow.Layout.Row = 3;
 
 ui.PowerPointsPanel = uipanel(powerGrid, 'Title', 'Linear Points (z_um, power)');
@@ -149,12 +325,13 @@ ui.PowerPointsPanel.Layout.Row = 4;
 ui.PowerPointsPanel.Layout.Column = 1;
 
 powerPointsGrid = uigridlayout(ui.PowerPointsPanel, [1, 1]);
-powerPointsGrid.Padding = [8, 8, 8, 8];
+powerPointsGrid.Padding = [5, 5, 5, 5];
 
 ui.PowerPointsArea = uitextarea(powerPointsGrid, ...
     'Value', {'0, 10'; '30, 20'});
 ui.PowerPointsArea.Layout.Row = 1;
 ui.PowerPointsArea.Layout.Column = 1;
+applyTooltip({ui.PowerPointsPanel, ui.PowerPointsArea}, tips.powerPointsArea);
 
 ui.PowerHintLabel = uilabel(powerGrid, ...
     'Text', 'All points will use the same P value.', ...
@@ -162,52 +339,97 @@ ui.PowerHintLabel = uilabel(powerGrid, ...
 ui.PowerHintLabel.Layout.Row = 5;
 ui.PowerHintLabel.Layout.Column = 1;
 
-ui.OrderingPanel = uipanel(controlGrid, 'Title', 'Ordering');
-ui.OrderingPanel.Layout.Row = 3;
+ui.OrderingPanel = uipanel(powerOrderGrid, 'Title', 'Writing Order');
+ui.OrderingPanel.Layout.Row = 2;
 ui.OrderingPanel.Layout.Column = 1;
 
 orderingGrid = uigridlayout(ui.OrderingPanel, [2, 1]);
 orderingGrid.RowHeight = {'fit', 'fit'};
-orderingGrid.RowSpacing = 8;
-orderingGrid.Padding = [8, 8, 8, 8];
+orderingGrid.RowSpacing = 5;
+orderingGrid.Padding = [6, 6, 6, 6];
 
 ui.TraversalNoteLabel = uilabel(orderingGrid, ...
-    'Text', 'Traversal: layer-by-layer (Z ascending).', ...
+    'Text', 'Traversal: layer-by-layer (deep to shallow, ascending Z; smaller Z is deeper).', ...
     'WordWrap', 'on');
 ui.TraversalNoteLabel.Layout.Row = 1;
 ui.TraversalNoteLabel.Layout.Column = 1;
 
 [ui.PathModeRow, ui.PathModeDropDown] = createDropdownRow( ...
-    orderingGrid, 'In-layer Path', {'Row-major', 'Serpentine'}, 'Row-major', []);
+    orderingGrid, 'In-layer Path', {'Row-major', 'Serpentine'}, 'Row-major', [], ...
+    {'Row-major', 'Serpentine'}, tips.pathMode);
 ui.PathModeRow.Layout.Row = 2;
 
-ui.OutputPanel = uipanel(controlGrid, 'Title', 'Output');
-ui.OutputPanel.Layout.Row = 4;
-ui.OutputPanel.Layout.Column = 1;
+ui.PlanPanel = uipanel(powerOrderGrid, 'Title', 'Exposure / Scan');
+ui.PlanPanel.Layout.Row = 3;
+ui.PlanPanel.Layout.Column = 1;
 
-outputGrid = uigridlayout(ui.OutputPanel, [5, 1]);
-outputGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit'};
-outputGrid.RowSpacing = 8;
-outputGrid.Padding = [8, 8, 8, 8];
+planGrid = uigridlayout(ui.PlanPanel, [8, 1]);
+planGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+planGrid.RowSpacing = 5;
+planGrid.Padding = [6, 6, 6, 6];
 
-ui.ImportHintLabel = uilabel(outputGrid, ...
-    'Text', 'Single file columns for Imported Points: X=1, Y=2, Z=3, P=4', ...
+[ui.ExposureModeRow, ui.ExposureModeDropDown] = createDropdownRow( ...
+    planGrid, 'Exposure Mode', {'Point dwell', 'Axis scan'}, 'Axis scan', @onPlanParamChanged, ...
+    {'Point dwell', 'Axis scan'}, tips.exposureMode);
+ui.ExposureModeRow.Layout.Row = 1;
+
+[ui.DwellSecondsRow, ui.DwellSecondsField] = createNumericRow(planGrid, 'Dwell (s)', 1, tips.dwellSeconds);
+ui.DwellSecondsRow.Layout.Row = 2;
+ui.DwellSecondsField.ValueChangedFcn = @onPlanParamChanged;
+
+[ui.ScanAxisRow, ui.ScanAxisDropDown] = createDropdownRow( ...
+    planGrid, 'Scan Axis', {'X', 'Y', 'Z'}, 'Z', @onPlanParamChanged, [], tips.scanAxis);
+ui.ScanAxisRow.Layout.Row = 3;
+
+[ui.ScanDirectionRow, ui.ScanDirectionDropDown] = createDropdownRow( ...
+    planGrid, 'Direction', {'Positive', 'Negative'}, 'Positive', @onPlanParamChanged, ...
+    {'Positive', 'Negative'}, tips.scanDirection);
+ui.ScanDirectionRow.Layout.Row = 4;
+
+[ui.ScanAnchorRow, ui.ScanAnchorDropDown] = createDropdownRow( ...
+    planGrid, 'Anchor', {'Centered on point', 'Start at point'}, 'Start at point', @onPlanParamChanged, ...
+    {'Center on point', 'Start at point'}, tips.scanAnchor);
+ui.ScanAnchorRow.Layout.Row = 5;
+
+[ui.ScanLengthRow, ui.ScanLengthField] = createNumericRow(planGrid, 'Length (um)', 10, tips.scanLength);
+ui.ScanLengthRow.Layout.Row = 6;
+ui.ScanLengthField.ValueChangedFcn = @onPlanParamChanged;
+
+[ui.ScanSpeedRow, ui.ScanSpeedField] = createNumericRow(planGrid, 'Speed (mm/s)', 0.01, tips.scanSpeed);
+ui.ScanSpeedRow.Layout.Row = 7;
+ui.ScanSpeedField.ValueChangedFcn = @onPlanParamChanged;
+
+[ui.PauseSecondsRow, ui.PauseSecondsField] = createNumericRow(planGrid, 'Pre-write pause (s)', 0.1, tips.pauseSeconds);
+ui.PauseSecondsRow.Layout.Row = 8;
+ui.PauseSecondsField.ValueChangedFcn = @onPlanParamChanged;
+
+ui.ActionPanel = uipanel(controlPanelGrid, 'BorderType', 'none');
+ui.ActionPanel.Layout.Row = 2;
+ui.ActionPanel.Layout.Column = 1;
+
+actionGrid = uigridlayout(ui.ActionPanel, [5, 1]);
+actionGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit'};
+actionGrid.RowSpacing = 5;
+actionGrid.Padding = [0, 0, 0, 0];
+
+ui.ImportHintLabel = uilabel(actionGrid, ...
+    'Text', 'Saved files include headers: mode, x/y/z, x2/y2/z2, power, dwell_s, scan_speed_mm_s, pause_s (pre-write pause).', ...
     'WordWrap', 'on');
 ui.ImportHintLabel.Layout.Row = 1;
 ui.ImportHintLabel.Layout.Column = 1;
 
-[ui.PreviewRowsRow, ui.PreviewRowsField] = createNumericRow(outputGrid, 'Preview rows', state.tablePreviewRowLimit);
+[ui.PreviewRowsRow, ui.PreviewRowsField] = createNumericRow(actionGrid, 'Preview rows', state.tablePreviewRowLimit, tips.previewRows);
 ui.PreviewRowsRow.Layout.Row = 2;
 ui.PreviewRowsField.ValueChangedFcn = @onPreviewRowsChanged;
 
-buttonRow = uipanel(outputGrid, 'BorderType', 'none');
+buttonRow = uipanel(actionGrid, 'BorderType', 'none');
 buttonRow.Layout.Row = 3;
 buttonRow.Layout.Column = 1;
 
-buttonGrid = uigridlayout(buttonRow, [1, 2]);
-buttonGrid.ColumnWidth = {'1x', '1x'};
+buttonGrid = uigridlayout(buttonRow, [1, 3]);
+buttonGrid.ColumnWidth = {'1x', '1x', '1x'};
 buttonGrid.RowHeight = {'fit'};
-buttonGrid.ColumnSpacing = 8;
+buttonGrid.ColumnSpacing = 6;
 buttonGrid.Padding = [0, 0, 0, 0];
 
 ui.GenerateButton = uibutton(buttonGrid, ...
@@ -217,21 +439,28 @@ ui.GenerateButton = uibutton(buttonGrid, ...
 ui.GenerateButton.Layout.Row = 1;
 ui.GenerateButton.Layout.Column = 1;
 
+ui.LoadPlanButton = uibutton(buttonGrid, ...
+    'push', ...
+    'Text', 'Load Plan', ...
+    'ButtonPushedFcn', @onLoadPlan);
+ui.LoadPlanButton.Layout.Row = 1;
+ui.LoadPlanButton.Layout.Column = 2;
+
 ui.SaveButton = uibutton(buttonGrid, ...
     'push', ...
-    'Text', 'Save Combined File', ...
+    'Text', 'Save Plan', ...
     'ButtonPushedFcn', @onSave);
 ui.SaveButton.Layout.Row = 1;
-ui.SaveButton.Layout.Column = 2;
+ui.SaveButton.Layout.Column = 3;
 
-ui.FileHintLabel = uilabel(outputGrid, ...
+ui.FileHintLabel = uilabel(actionGrid, ...
     'Text', 'Suggested CSV filename will appear after Generate Preview.', ...
     'WordWrap', 'on', ...
     'FontColor', [0.35, 0.35, 0.35]);
 ui.FileHintLabel.Layout.Row = 4;
 ui.FileHintLabel.Layout.Column = 1;
 
-ui.StatusLabel = uilabel(outputGrid, ...
+ui.StatusLabel = uilabel(actionGrid, ...
     'Text', 'Ready.', ...
     'WordWrap', 'on', ...
     'FontWeight', 'bold');
@@ -244,8 +473,8 @@ previewPanel.Layout.Column = 2;
 
 previewGrid = uigridlayout(previewPanel, [3, 1]);
 previewGrid.RowHeight = {'2.3x', 'fit', '1x'};
-previewGrid.RowSpacing = 10;
-previewGrid.Padding = [10, 10, 10, 10];
+previewGrid.RowSpacing = 6;
+previewGrid.Padding = [6, 6, 6, 6];
 
 ui.PreviewAxes = uiaxes(previewGrid);
 ui.PreviewAxes.Layout.Row = 1;
@@ -253,12 +482,13 @@ ui.PreviewAxes.Layout.Column = 1;
 ui.PreviewAxes.Box = 'on';
 ui.PreviewAxes.XLabel.String = 'X (mm)';
 ui.PreviewAxes.YLabel.String = 'Y (mm)';
-ui.PreviewAxes.ZLabel.String = 'Z (mm)';
+ui.PreviewAxes.ZLabel.String = 'Z (mm, smaller = deeper)';
 title(ui.PreviewAxes, 'Point Cloud Preview');
 grid(ui.PreviewAxes, 'on');
 view(ui.PreviewAxes, 30, 25);
+applyPreviewAxisOrientation(ui.PreviewAxes);
 ui.PowerColorbar = colorbar(ui.PreviewAxes);
-ui.PowerColorbar.Label.String = 'Power (%)';
+ui.PowerColorbar.Label.String = 'Power';
 
 ui.SummaryLabel = uilabel(previewGrid, ...
     'Text', 'No preview generated yet.', ...
@@ -267,38 +497,71 @@ ui.SummaryLabel.Layout.Row = 2;
 ui.SummaryLabel.Layout.Column = 1;
 
 ui.DataTable = uitable(previewGrid, ...
-    'ColumnName', {'X_mm', 'Y_mm', 'Z_mm', 'P'}, ...
-    'ColumnEditable', [false, false, false, false], ...
-    'ColumnWidth', {110, 110, 110, 90}, ...
+    'ColumnName', writingPlanColumnNames(), ...
+    'ColumnEditable', false(1, numel(writingPlanColumnNames())), ...
+    'ColumnWidth', {70, 80, 80, 80, 80, 80, 80, 70, 72, 125, 72, 90, 90, 90, 90, 90, 90, 120}, ...
     'RowName', []);
 ui.DataTable.Layout.Row = 3;
 ui.DataTable.Layout.Column = 1;
 
 onLatticeTypeChanged();
 onPowerModeChanged();
+onPlanParamChanged();
 onGenerate();
+applyCompactFonts(fig);
 
     function onLatticeTypeChanged(~, ~)
         latticeType = string(ui.LatticeTypeDropDown.Value);
         isStaircase = latticeType == "Staircase";
+        isGrating = latticeType == "Segmented Grating";
+        isZPush = latticeType == "Z Push";
+        isHexCut = latticeType == "Hexagon Cut";
+        isFixedOrder = isStaircase || isGrating || isZPush || isHexCut;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
 
-        setPanelRow(latticeGrid, 2, ui.CountsPanel, 84, ~isStaircase);
-        setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 84, showCartesian);
-        setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 76, showHexPitch);
-        setPanelRow(latticeGrid, 5, ui.OriginPanel, 84, ~isStaircase);
-        setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 76, showHcpShift);
-        setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 84, isStaircase);
-        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 84, isStaircase);
-        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 76, isStaircase);
-        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 76, isStaircase);
-        setPanelRow(latticeGrid, 11, ui.GapPanel, 76, isStaircase);
-        setPanelRow(latticeGrid, 12, ui.StaircaseOriginPanel, 76, isStaircase);
+        setPanelRow(latticeGrid, 2, ui.CountsPanel, 'fit', ~isFixedOrder);
+        setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 'fit', showCartesian);
+        setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 'fit', showHexPitch);
+        setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ~isStaircase && ~isZPush && ~isHexCut);
+        setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 'fit', showHcpShift);
+        setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 11, ui.GapPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 12, ui.StaircaseOriginPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 13, ui.GratingAxesPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 14, ui.GratingDepthPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 15, ui.GratingSegmentOnePanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 16, ui.GratingSegmentTwoPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 17, ui.GratingSlabOnePanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 18, ui.GratingSlabTwoPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 19, ui.GratingChannelPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 20, ui.GratingChannelStartsPanel, gratingChannelTablePanelHeight(), isGrating);
+        setPanelRow(latticeGrid, 21, ui.GratingScanPanel, 'fit', isGrating);
+        setPanelRow(latticeGrid, 22, ui.ZPushOriginPanel, 'fit', isZPush);
+        setPanelRow(latticeGrid, 23, ui.ZPushMovePanel, 'fit', isZPush);
+        setPanelRow(latticeGrid, 24, ui.ZPushConfigPanel, 'fit', isZPush);
+        setPanelRow(latticeGrid, 25, ui.HexCutCenterPanel, 'fit', isHexCut);
+        setPanelRow(latticeGrid, 26, ui.HexCutGeometryPanel, 'fit', isHexCut);
+        setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isHexCut);
+        setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isHexCut);
 
-        setPanelRow(controlGrid, 2, ui.PowerPanel, 'fit', ~isStaircase);
-        setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isStaircase);
+        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isHexCut);
+        setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
+        setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isHexCut);
+        if isGrating
+            ui.ExposureModeDropDown.Value = 'Axis scan';
+            syncGratingScanAxis();
+            onPlanParamChanged();
+        elseif isZPush
+            ui.ExposureModeDropDown.Value = 'Point dwell';
+            onPlanParamChanged();
+        elseif isHexCut
+            onPlanParamChanged();
+        end
         updateTraversalNote();
     end
 
@@ -307,7 +570,7 @@ onGenerate();
 
         setPanelRow(powerGrid, 2, ui.FixedPowerRow, 'fit', powerMode == "Fixed value");
         setPanelRow(powerGrid, 3, ui.PowerFormulaRow, 'fit', powerMode == "Custom formula");
-        setPanelRow(powerGrid, 4, ui.PowerPointsPanel, 100, powerMode == "Linear points");
+        setPanelRow(powerGrid, 4, ui.PowerPointsPanel, 78, powerMode == "Linear points");
 
         switch powerMode
             case "Fixed value"
@@ -324,12 +587,131 @@ onGenerate();
         ui.PreviewRowsField.Value = state.tablePreviewRowLimit;
 
         if ~isempty(state.generatedData) && ~isempty(state.generatedSummary)
-            updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary);
+            if ~state.previewFromLoadedPlan
+                refreshPlanFromCurrentSettings();
+            end
+            updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+        end
+    end
+
+    function onPlanParamChanged(~, ~)
+        isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
+        isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
+        if isGrating
+            ui.ExposureModeDropDown.Value = 'Axis scan';
+            syncGratingScanAxis();
+        elseif isZPush
+            ui.ExposureModeDropDown.Value = 'Point dwell';
+        end
+
+        isScan = string(ui.ExposureModeDropDown.Value) == "Axis scan";
+        setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ~isScan);
+        setPanelRow(planGrid, 3, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
+        setPanelRow(planGrid, 4, ui.ScanDirectionRow, 'fit', isScan);
+        setPanelRow(planGrid, 5, ui.ScanAnchorRow, 'fit', isScan);
+        setPanelRow(planGrid, 6, ui.ScanLengthRow, 'fit', isScan && ~isGrating);
+        setPanelRow(planGrid, 7, ui.ScanSpeedRow, 'fit', isScan);
+        setPanelRow(planGrid, 8, ui.PauseSecondsRow, 'fit', ~isZPush);
+
+        if ~isempty(state.generatedData) && ~isempty(state.generatedSummary) && ~state.previewFromLoadedPlan
+            try
+                refreshPlanFromCurrentSettings();
+                updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+                ui.StatusLabel.Text = sprintf('Updated %s plan.', exposureModeDisplayName(ui.ExposureModeDropDown.Value));
+            catch err
+                ui.StatusLabel.Text = ['Invalid plan parameters: ', err.message];
+            end
         end
     end
 
     function onStaircaseParamChanged(~, ~)
         updateTraversalNote();
+    end
+
+    function onGratingAxisChanged(~, ~)
+        if string(ui.LatticeTypeDropDown.Value) == "Segmented Grating"
+            syncGratingScanAxis();
+        end
+        updateTraversalNote();
+    end
+
+    function onGratingChannelMatrixChanged(~, ~)
+        syncGratingChannelStartsTable();
+    end
+
+    function syncGratingChannelStartsTable()
+        channelRows = round(max(1, ui.GratingChannelRowsField.Value));
+        channelCols = round(max(1, ui.GratingChannelColsField.Value));
+        ui.GratingChannelRowsField.Value = channelRows;
+        ui.GratingChannelColsField.Value = channelCols;
+
+        resizeGratingStartTable(ui.GratingSegmentOneStartsTable, channelRows, channelCols);
+        resizeGratingStartTable(ui.GratingSegmentTwoStartsTable, channelRows, channelCols);
+        tableHeight = gratingStartTableHeight(channelRows);
+        gratingStartsGrid.RowHeight = {'fit', tableHeight, 'fit', tableHeight};
+        if string(ui.LatticeTypeDropDown.Value) == "Segmented Grating"
+            latticeGrid.RowHeight{20} = gratingChannelTablePanelHeight(channelRows);
+        end
+    end
+
+    function resizeGratingStartTable(tableHandle, channelRows, channelCols)
+        oldData = tableHandle.Data;
+        if ~iscell(oldData)
+            oldData = cellstr(string(oldData));
+        end
+
+        newData = repmat({''}, channelRows, channelCols);
+        copyRows = min(channelRows, size(oldData, 1));
+        copyCols = min(channelCols, size(oldData, 2));
+        if copyRows > 0 && copyCols > 0
+            newData(1:copyRows, 1:copyCols) = oldData(1:copyRows, 1:copyCols);
+        end
+
+        tableHandle.Data = newData;
+        tableHandle.RowName = cellstr(compose('R%d', 1:channelRows));
+        tableHandle.ColumnName = cellstr(compose('C%d', 1:channelCols));
+        tableHandle.ColumnEditable = true(1, channelCols);
+        tableHandle.ColumnWidth = repmat({54}, 1, channelCols);
+    end
+
+    function panelHeight = gratingChannelTablePanelHeight(channelRows)
+        if nargin < 1
+            channelRows = round(max(1, ui.GratingChannelRowsField.Value));
+        end
+
+        panelHeight = gratingChannelStartsContentHeight(channelRows);
+    end
+
+    function tableHeight = gratingStartTableHeight(channelRows)
+        tableHeight = 58 + 32 * channelRows;
+        tableHeight = max(150, tableHeight);
+    end
+
+    function contentHeight = gratingChannelStartsContentHeight(channelRows)
+        contentHeight = 2 * gratingStartTableHeight(channelRows) + 56;
+    end
+
+    function syncGratingScanAxis()
+        try
+            scanAxis = inferredGratingScanAxis();
+            ui.ScanAxisDropDown.Value = char(scanAxis);
+        catch
+            % Invalid axis combinations are reported during generation.
+        end
+    end
+
+    function scanAxis = inferredGratingScanAxis()
+        depthAxis = string(ui.GratingDepthAxisDropDown.Value);
+        periodAxis = string(ui.GratingPeriodAxisDropDown.Value);
+        axisNames = ["X", "Y", "Z"];
+        if depthAxis == periodAxis
+            error('Grating depth axis and period axis cannot be the same.');
+        end
+
+        scanAxis = axisNames(~ismember(axisNames, [depthAxis, periodAxis]));
+        if numel(scanAxis) ~= 1
+            error('Unable to infer the grating scan axis.');
+        end
     end
 
     function onGenerate(~, ~)
@@ -339,11 +721,48 @@ onGenerate();
             state.generatedData = data;
             state.generatedPrefix = prefix;
             state.generatedSummary = summary;
-            updatePreview(data, prefix, summary);
-            ui.StatusLabel.Text = sprintf('Generated %d points.', summary.pointCount);
+            state.previewFromLoadedPlan = false;
+            refreshPlanFromCurrentSettings();
+            updatePreview(data, prefix, summary, state.generatedPlanTable);
+            ui.StatusLabel.Text = sprintf('Generated %d operations.', summary.pointCount);
         catch err
             uialert(fig, err.message, 'Generate Failed');
             ui.StatusLabel.Text = 'Generate failed.';
+        end
+    end
+
+    function onLoadPlan(~, ~)
+        try
+            [fileName, folderName] = uigetfile( ...
+                {'*.csv;*.txt;*.tsv', 'Writing plan files (*.csv, *.txt, *.tsv)'; ...
+                 '*.*', 'All files (*.*)'}, ...
+                'Load Writing Plan', ...
+                state.lastSaveFolder);
+
+            if isequal(fileName, 0) || isequal(folderName, 0)
+                return;
+            end
+
+            fullPath = fullfile(folderName, fileName);
+            planTable = readWritingPlanTable(fullPath);
+            data = writingPlanTableToPointData(planTable);
+            [~, prefix] = fileparts(fileName);
+            summary = importedPlanSummary(planTable, fileName);
+            summary.fileHint = ['Loaded: ', fullPath];
+
+            state.generatedData = data;
+            state.generatedPlanTable = planTable;
+            state.generatedPrefix = prefix;
+            state.generatedSummary = summary;
+            state.previewFromLoadedPlan = true;
+            state.lastSaveFolder = folderName;
+
+            updatePreview(data, prefix, summary, planTable);
+            ui.FileHintLabel.Text = ['Loaded: ', fullPath];
+            ui.StatusLabel.Text = sprintf('Loaded %d operations.', height(planTable));
+        catch err
+            uialert(fig, err.message, 'Load Failed');
+            ui.StatusLabel.Text = 'Load failed.';
         end
     end
 
@@ -356,10 +775,14 @@ onGenerate();
                 end
             end
 
-            defaultName = [state.generatedPrefix, '.csv'];
+            if ~state.previewFromLoadedPlan
+                refreshPlanFromCurrentSettings();
+            end
+
+            defaultName = [state.generatedPrefix, '_writing_plan.csv'];
             [fileName, folderName, filterIndex] = uiputfile( ...
                 {'*.csv', 'Comma-separated values (*.csv)'; '*.txt', 'Tab-delimited text (*.txt)'}, ...
-                'Save Combined Point Cloud', ...
+                'Save Writing Plan', ...
                 fullfile(state.lastSaveFolder, defaultName));
 
             if isequal(fileName, 0) || isequal(folderName, 0)
@@ -368,7 +791,7 @@ onGenerate();
 
             fullPath = fullfile(folderName, fileName);
             delimiter = localDelimiter(filterIndex, fileName);
-            writematrix(state.generatedData, fullPath, 'Delimiter', delimiter);
+            writetable(state.generatedPlanTable, fullPath, 'Delimiter', delimiter);
 
             state.lastSaveFolder = folderName;
             ui.StatusLabel.Text = ['Saved: ', fullPath];
@@ -402,6 +825,53 @@ onGenerate();
             params.lattice.gapYUm = ui.GapYField.Value;
             params.lattice.originXUm = ui.StaircaseOriginXField.Value;
             params.lattice.originYUm = ui.StaircaseOriginYField.Value;
+        elseif latticeType == "Segmented Grating"
+            params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
+            params.lattice.depthAxis = string(ui.GratingDepthAxisDropDown.Value);
+            params.lattice.periodAxis = string(ui.GratingPeriodAxisDropDown.Value);
+            params.lattice.nDepths = round(max(1, ui.GratingDepthCountField.Value));
+            params.lattice.depthStartUm = ui.GratingDepthStartField.Value;
+            params.lattice.depthStepUm = ui.GratingDepthStepField.Value;
+            params.lattice.period1Um = ui.GratingPeriod1Field.Value;
+            params.lattice.nPeriods1 = round(max(1, ui.GratingPeriodCount1Field.Value));
+            params.lattice.period2Um = ui.GratingPeriod2Field.Value;
+            params.lattice.nPeriods2 = round(max(1, ui.GratingPeriodCount2Field.Value));
+            params.lattice.segmentGapUm = ui.GratingSegmentGapField.Value;
+            params.lattice.slabCopies1 = round(max(1, ui.GratingSlabCopies1Field.Value));
+            params.lattice.slabPitch1Um = ui.GratingSlabPitch1Field.Value;
+            params.lattice.slabCopies2 = round(max(1, ui.GratingSlabCopies2Field.Value));
+            params.lattice.slabPitch2Um = ui.GratingSlabPitch2Field.Value;
+            syncGratingChannelStartsTable();
+            params.lattice.channelRows = round(max(1, ui.GratingChannelRowsField.Value));
+            params.lattice.channelCols = round(max(1, ui.GratingChannelColsField.Value));
+            params.lattice.channelRowPitchUm = ui.GratingChannelRowPitchField.Value;
+            params.lattice.channelColPitchUm = ui.GratingChannelColPitchField.Value;
+            params.lattice.channelStartsExplicit = true;
+            params.lattice.channelStartsUm = gratingChannelStartTablesToRows( ...
+                ui.GratingSegmentOneStartsTable.Data, ui.GratingSegmentTwoStartsTable.Data, ...
+                params.lattice.channelRows, params.lattice.channelCols);
+        elseif latticeType == "Z Push"
+            params.lattice.originUm = [ ...
+                ui.ZPushOriginXField.Value, ...
+                ui.ZPushOriginYField.Value, ...
+                ui.ZPushOriginZField.Value];
+            params.lattice.moveXYUm = [ui.ZPushMoveXField.Value, ui.ZPushMoveYField.Value];
+            params.lattice.pushCount = round(max(1, ui.ZPushCountField.Value));
+            params.lattice.pushStepUm = ui.ZPushStepField.Value;
+            params.lattice.intervalSeconds = ui.ZPushIntervalField.Value;
+        elseif latticeType == "Hexagon Cut"
+            params.lattice.centerUm = [ ...
+                ui.HexCutCenterXField.Value, ...
+                ui.HexCutCenterYField.Value, ...
+                ui.HexCutCenterZField.Value];
+            params.lattice.sideLengthUm = ui.HexCutSideLengthField.Value;
+            params.lattice.rotationDeg = ui.HexCutRotationField.Value;
+            params.lattice.direction = string(ui.HexCutDirectionDropDown.Value);
+            params.lattice.powerPercent = ui.HexCutPowerField.Value;
+            params.lattice.cutSpeedMmPerSecond = ui.HexCutSpeedField.Value;
+            params.lattice.accelerationMmPerSecondSquared = ui.HexCutAccelerationField.Value;
+            params.lattice.leadSafetyFactor = ui.HexCutLeadSafetyField.Value;
+            params.lattice.exitSafetyFactor = ui.HexCutExitSafetyField.Value;
         else
             params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
             params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
@@ -432,167 +902,1052 @@ onGenerate();
         params.power.linearPointsText = strjoin(string(ui.PowerPointsArea.Value), newline);
     end
 
-    function updatePreview(data, prefix, summary)
+    function rows = gratingChannelStartTablesToRows(segmentOneData, segmentTwoData, channelRows, channelCols)
+        rows = zeros(0, 4);
+
+        for iRow = 1:channelRows
+            for iCol = 1:channelCols
+                segmentOneStart = gratingStartTableValue(segmentOneData, iRow, iCol, 'First Grating');
+                segmentTwoStart = gratingStartTableValue(segmentTwoData, iRow, iCol, 'Second Grating');
+                rows(end + 1, :) = [iRow, iCol, segmentOneStart, segmentTwoStart]; %#ok<AGROW>
+            end
+        end
+    end
+
+    function value = gratingStartTableValue(tableData, iRow, iCol, tableName)
+        if isempty(tableData) || iRow > size(tableData, 1) || iCol > size(tableData, 2)
+            value = nan;
+            return;
+        end
+
+        if iscell(tableData)
+            cellValue = tableData{iRow, iCol};
+        else
+            cellValue = tableData(iRow, iCol);
+        end
+
+        value = parseSingleGratingStartCell(cellValue, iRow, iCol, tableName);
+    end
+
+    function value = parseSingleGratingStartCell(cellValue, iRow, iCol, tableName)
+        if isempty(cellValue) || ismissingValue(cellValue)
+            value = nan;
+            return;
+        end
+
+        if isnumeric(cellValue)
+            if ~isscalar(cellValue)
+                error('%s start-position table R%d/C%d must contain only one number per cell.', tableName, iRow, iCol);
+            end
+            value = double(cellValue);
+            if isnan(value)
+                return;
+            end
+            if ~isfinite(value)
+                error('%s start-position table R%d/C%d must be a finite number, or blank to skip writing.', tableName, iRow, iCol);
+            end
+            return;
+        end
+
+        textValue = strtrim(string(cellValue));
+        if strlength(textValue) == 0 || any(strcmpi(textValue, ["N", "NaN"]))
+            value = nan;
+            return;
+        end
+        if contains(textValue, ",") || contains(textValue, ";")
+            error('%s start-position table R%d/C%d must contain only one number per cell.', tableName, iRow, iCol);
+        end
+
+        parts = regexp(char(textValue), '\s+', 'split');
+        parts = parts(~cellfun('isempty', parts));
+        if numel(parts) ~= 1
+            error('%s start-position table R%d/C%d must contain only one number per cell.', tableName, iRow, iCol);
+        end
+
+        value = str2double(parts{1});
+        if isnan(value)
+            if strcmpi(parts{1}, 'N') || strcmpi(parts{1}, 'NaN')
+                return;
+            end
+            error('%s start-position table R%d/C%d must be numeric, blank, or N to skip writing.', tableName, iRow, iCol);
+        elseif ~isfinite(value)
+            error('%s start-position table R%d/C%d must be a finite number, or blank to skip writing.', tableName, iRow, iCol);
+        end
+    end
+
+    function tf = ismissingValue(value)
+        try
+            tf = ismissing(value);
+            if ~isscalar(tf)
+                tf = all(tf(:));
+            end
+        catch
+            tf = false;
+        end
+    end
+
+    function refreshPlanFromCurrentSettings()
+        planConfig = collectPlanConfig();
+        state.generatedPlanTable = buildWritingPlanTable(state.generatedData, planConfig);
+    end
+
+    function planConfig = collectPlanConfig()
+        isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
+        isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
+        isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
+        planConfig = struct();
+        planConfig.mode = normalizePlanOption(ui.ExposureModeDropDown.Value);
+        planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
+        planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
+        planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
+        planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
+        if isGrating
+            planConfig.scanLengthUm = validatePositiveScalar(ui.GratingScanLengthField.Value, 'Grating scan length');
+        else
+            planConfig.scanLengthUm = validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length');
+        end
+        planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
+        planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
+        planConfig.preserveOrder = isGrating || isZPush;
+
+        if isGrating
+            planConfig.mode = "axis_scan";
+            planConfig.scanAxis = inferredGratingScanAxis();
+        elseif isZPush
+            planConfig.mode = "point_dwell";
+        elseif isHexCut
+            planConfig.mode = "cut_scan";
+            planConfig.preserveOrder = true;
+        end
+    end
+
+    function updatePreview(data, prefix, summary, planTable)
+        if nargin < 4 || isempty(planTable)
+            refreshPlanFromCurrentSettings();
+            planTable = state.generatedPlanTable;
+        end
+
         plotIdx = localPreviewIndices(size(data, 1), state.maxPlotPreviewPoints);
-        plotData = data(plotIdx, :);
+        plotTable = planTable(plotIdx, :);
 
         cla(ui.PreviewAxes);
         hold(ui.PreviewAxes, 'on');
 
-        if size(plotData, 1) > 1
+        if height(plotTable) > 1
             plot3(ui.PreviewAxes, ...
-                plotData(:, 1), plotData(:, 2), plotData(:, 3), ...
+                plotTable.x_mm, plotTable.y_mm, plotTable.z_mm, ...
                 '-', ...
                 'Color', [0.72, 0.72, 0.72], ...
                 'LineWidth', 0.35);
         end
 
+        scanMask = string(plotTable.mode) == "scan";
+        if any(scanMask)
+            scanTable = plotTable(scanMask, :);
+            drawScanPreviewLines(ui.PreviewAxes, scanTable, [0.95, 0.45, 0.12]);
+        end
+
+        cutMask = string(plotTable.mode) == "cut";
+        if any(cutMask)
+            cutTable = plotTable(cutMask, :);
+            drawCutPreviewLines(ui.PreviewAxes, cutTable);
+        end
+
         sc = scatter3(ui.PreviewAxes, ...
-            plotData(:, 1), plotData(:, 2), plotData(:, 3), ...
-            12, plotData(:, 4), 'filled');
-        sc.DataTipTemplate.DataTipRows(end).Label = 'Power (%)';
+            plotTable.x_mm, plotTable.y_mm, plotTable.z_mm, ...
+            12, plotTable.power, 'filled');
+        sc.DataTipTemplate.DataTipRows(end).Label = 'Power';
 
         hold(ui.PreviewAxes, 'off');
         grid(ui.PreviewAxes, 'on');
         colormap(ui.PreviewAxes, turbo);
-        title(ui.PreviewAxes, 'Point Cloud Preview');
-        applyPreviewLimits3D(ui.PreviewAxes, data(:, 1), data(:, 2), data(:, 3));
+        title(ui.PreviewAxes, 'Writing Plan Preview');
+        [boundsX, boundsY, boundsZ] = planPreviewBounds(planTable);
+        applyPreviewLimits3D(ui.PreviewAxes, boundsX, boundsY, boundsZ);
 
         if ~isgraphics(ui.PowerColorbar)
             ui.PowerColorbar = colorbar(ui.PreviewAxes);
         end
-        ui.PowerColorbar.Label.String = 'Power (%)';
+        ui.PowerColorbar.Label.String = 'Power';
 
-        previewRows = min(state.tablePreviewRowLimit, size(data, 1));
-        ui.DataTable.Data = data(1:previewRows, :);
+        previewRows = min(state.tablePreviewRowLimit, height(planTable));
+        ui.DataTable.Data = planTable(1:previewRows, :);
+        ui.DataTable.ColumnName = planTable.Properties.VariableNames;
+        ui.DataTable.ColumnEditable = false(1, width(planTable));
 
         if numel(plotIdx) < size(data, 1)
-            plotNote = sprintf('3D preview uses %d evenly sampled points to keep the app responsive.', numel(plotIdx));
+            plotNote = sprintf('3D preview shows a sample of %d operations to keep the UI responsive.', numel(plotIdx));
         else
-            plotNote = '3D preview shows all points in write order.';
+            plotNote = '3D preview shows all operations in writing order.';
         end
 
-        ui.FileHintLabel.Text = ['Suggested filename: ', prefix, '.csv'];
+        if isfield(summary, 'fileHint') && strlength(string(summary.fileHint)) > 0
+            ui.FileHintLabel.Text = char(summary.fileHint);
+        else
+            ui.FileHintLabel.Text = ['Suggested filename: ', prefix, '_writing_plan.csv'];
+        end
+        [pointCount, scanCount, cutCount] = planOperationCounts(planTable);
         ui.SummaryLabel.Text = sprintf([ ...
-            'Points: %d of %d | Lattice: %s\n', ...
+            'Operations: %d point dwells, %d axis scans, %d cuts | Source points: %d / %d | Lattice: %s\n', ...
             'Traversal: %s | Path: %s | Power: %s\n', ...
             '%s\n', ...
             'X range: %.4f to %.4f mm | Y range: %.4f to %.4f mm\n', ...
-            'Z range: %.4f to %.4f mm | Power range: %.2f to %.2f %%\n', ...
-            '%s Table shows the first %d rows only.'], ...
-            summary.pointCount, summary.sourcePointCount, summary.latticeLabel, ...
+            'Z range: %.4f to %.4f mm | Power range: %.2f to %.2f\n', ...
+            '%s table shows only the first %d rows.'], ...
+            pointCount, scanCount, cutCount, summary.pointCount, summary.sourcePointCount, summary.latticeLabel, ...
             summary.layerTraversalLabel, summary.pathModeLabel, summary.powerModeLabel, ...
             summary.pitchLabel, ...
-            summary.xRangeMm(1), summary.xRangeMm(2), ...
-            summary.yRangeMm(1), summary.yRangeMm(2), ...
-            summary.zRangeMm(1), summary.zRangeMm(2), ...
+            min(boundsX), max(boundsX), min(boundsY), max(boundsY), min(boundsZ), max(boundsZ), ...
             summary.powerRange(1), summary.powerRange(2), ...
             plotNote, previewRows);
     end
 
     function updateTraversalNote()
-        if string(ui.LatticeTypeDropDown.Value) ~= "Staircase"
-            ui.TraversalNoteLabel.Text = 'Traversal: layer-by-layer (Z ascending).';
+        latticeType = string(ui.LatticeTypeDropDown.Value);
+        if latticeType == "Z Push"
+            nPush = round(max(1, ui.ZPushCountField.Value));
+            zStepUm = ui.ZPushStepField.Value;
+            intervalSeconds = ui.ZPushIntervalField.Value;
+            finalDepthUm = nPush * zStepUm;
+            if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm) && zStepUm > 0)
+                detailText = 'Z Push requires a push step greater than 0.';
+            elseif ~(isscalar(intervalSeconds) && isnumeric(intervalSeconds) && isfinite(intervalSeconds) && intervalSeconds >= 0)
+                detailText = 'Z Push requires a nonnegative interval time.';
+            else
+                detailText = sprintf('Apply the XY offset first, then push toward -Z (deeper) starting at Z0 - %.4g um for %d steps, reaching Z0 - %.4g um, waiting %.4g s each time.', ...
+                    zStepUm, nPush, finalDepthUm, intervalSeconds);
+            end
+            ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
             return;
         end
 
-        zStepUm = ui.ZStepField.Value;
-        if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm))
-            detailText = 'Staircase requires a finite non-zero Z Step.';
-        elseif zStepUm > 0
-            detailText = 'Deep to shallow (Z ascending).';
-        elseif zStepUm < 0
-            detailText = 'Shallow to deep (Z descending).';
-        else
-            detailText = 'Staircase requires a non-zero Z Step.';
+        if latticeType == "Hexagon Cut"
+            speed = ui.HexCutSpeedField.Value;
+            acceleration = ui.HexCutAccelerationField.Value;
+            leadSafety = ui.HexCutLeadSafetyField.Value;
+            exitSafety = ui.HexCutExitSafetyField.Value;
+            if ~(isscalar(speed) && isnumeric(speed) && isfinite(speed) && speed > 0)
+                detailText = 'Hexagon Cut requires a finite positive cut speed.';
+            elseif ~(isscalar(acceleration) && isnumeric(acceleration) && isfinite(acceleration) && acceleration > 0)
+                detailText = 'Hexagon Cut requires a finite positive acceleration.';
+            elseif ~(isscalar(leadSafety) && isnumeric(leadSafety) && isfinite(leadSafety) && leadSafety > 0)
+                detailText = 'Hexagon Cut requires a finite positive lead safety factor.';
+            elseif ~(isscalar(exitSafety) && isnumeric(exitSafety) && isfinite(exitSafety) && exitSafety >= 0)
+                detailText = 'Hexagon Cut requires a finite nonnegative exit safety factor.';
+            else
+                baseLeadUm = (speed ^ 2 / (2 * acceleration)) * 1000;
+                detailText = sprintf('Each edge starts %.4g um before the cut start, exposes during the edge, then exits %.4g um after the cut end.', ...
+                    baseLeadUm * leadSafety, baseLeadUm * exitSafety);
+            end
+            ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
+            return;
         end
 
-        ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Row-major within each patch.'];
+        if latticeType ~= "Staircase" && latticeType ~= "Segmented Grating"
+            ui.TraversalNoteLabel.Text = 'Traversal: layer-by-layer (deep to shallow, ascending Z; smaller Z is deeper).';
+            return;
+        end
+
+        if latticeType == "Staircase"
+            zStepUm = ui.ZStepField.Value;
+            if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm))
+                detailText = 'Staircase mode requires a finite non-zero Z Step.';
+            elseif zStepUm ~= 0
+                detailText = 'Deep to shallow (ascending Z; smaller Z is deeper).';
+            else
+                detailText = 'Staircase mode requires a non-zero Z Step.';
+            end
+
+            ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Row-major within each patch.'];
+            return;
+        end
+
+        depthStepUm = ui.GratingDepthStepField.Value;
+        depthAxis = string(ui.GratingDepthAxisDropDown.Value);
+        periodAxis = string(ui.GratingPeriodAxisDropDown.Value);
+        if depthAxis == periodAxis
+            detailText = 'Grating depth axis and period axis cannot be the same.';
+        elseif ~(isscalar(depthStepUm) && isnumeric(depthStepUm) && isfinite(depthStepUm))
+            detailText = 'Grating requires a finite non-zero depth step.';
+        elseif depthStepUm == 0
+            detailText = 'Grating requires a non-zero depth step.';
+        elseif depthAxis == "Z"
+            detailText = 'Deep to shallow (ascending Z; smaller Z is deeper).';
+        elseif depthStepUm > 0
+            detailText = sprintf('Increasing along %s.', depthAxis);
+        elseif depthStepUm < 0
+            detailText = sprintf('Decreasing along %s.', depthAxis);
+        else
+            detailText = 'Grating requires a non-zero depth step.';
+        end
+
+        ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Within each layer, write the channel matrix row by row and column by column; each channel writes segment 1 before segment 2, and the scan axis is inferred from the remaining coordinate axis.'];
     end
 end
 
-function [rowPanel, dropdown] = createDropdownRow(parent, labelText, items, defaultValue, callback)
+function names = writingPlanColumnNames()
+names = {'mode', 'x_mm', 'y_mm', 'z_mm', 'x2_mm', 'y2_mm', 'z2_mm', ...
+    'power', 'dwell_s', 'scan_speed_mm_s', 'pause_s', ...
+    'lead_x_mm', 'lead_y_mm', 'lead_z_mm', ...
+    'exit_x_mm', 'exit_y_mm', 'exit_z_mm', 'lead_speed_mm_s'};
+end
+
+function names = writingPlanBaseColumnNames()
+names = {'mode', 'x_mm', 'y_mm', 'z_mm', 'x2_mm', 'y2_mm', 'z2_mm', ...
+    'power', 'dwell_s', 'scan_speed_mm_s', 'pause_s'};
+end
+
+function planTable = readWritingPlanTable(filePath)
+delimiters = delimiterCandidates(filePath);
+messages = strings(0, 1);
+
+for iDelimiter = 1:numel(delimiters)
+    try
+        options = detectImportOptions(filePath, 'FileType', 'text', 'VariableNamingRule', 'preserve');
+        if strlength(delimiters(iDelimiter)) > 0 && isprop(options, 'Delimiter')
+            options.Delimiter = char(delimiters(iDelimiter));
+        end
+        rawTable = readtable(filePath, options);
+        if isempty(rawTable) || height(rawTable) == 0
+            error('The loaded writing plan file is empty.');
+        end
+        planTable = normalizeWritingPlanTable(rawTable);
+        return;
+    catch err
+        messages(end + 1) = string(err.message); %#ok<AGROW>
+    end
+end
+
+error('Unable to read writing plan file: %s', messages(end));
+end
+
+function delimiters = delimiterCandidates(filePath)
+[~, ~, extension] = fileparts(filePath);
+tabDelimiter = string(sprintf('\t'));
+switch lower(extension)
+    case '.csv'
+        delimiters = ["", ",", tabDelimiter, ";"];
+    case {'.txt', '.tsv'}
+        delimiters = ["", tabDelimiter, ",", ";"];
+    otherwise
+        delimiters = ["", ",", tabDelimiter, ";"];
+end
+end
+
+function planTable = normalizeWritingPlanTable(rawTable)
+expectedNames = writingPlanColumnNames();
+baseNames = writingPlanBaseColumnNames();
+actualNames = string(rawTable.Properties.VariableNames);
+missingNames = setdiff(string(baseNames), actualNames, 'stable');
+if ~isempty(missingNames)
+    error('Writing plan file is missing columns: %s.', strjoin(missingNames, ', '));
+end
+
+n = height(rawTable);
+mode = normalizeLoadedPlanModes(rawTable.mode);
+x = numericColumn(rawTable.x_mm, 'x_mm');
+y = numericColumn(rawTable.y_mm, 'y_mm');
+z = numericColumn(rawTable.z_mm, 'z_mm');
+x2 = numericColumn(rawTable.x2_mm, 'x2_mm');
+y2 = numericColumn(rawTable.y2_mm, 'y2_mm');
+z2 = numericColumn(rawTable.z2_mm, 'z2_mm');
+power = numericColumn(rawTable.power, 'power');
+dwell = numericColumn(rawTable.dwell_s, 'dwell_s');
+scanSpeed = numericColumn(rawTable.scan_speed_mm_s, 'scan_speed_mm_s');
+pauseSeconds = numericColumn(rawTable.pause_s, 'pause_s');
+leadX = numericOptionalColumn(rawTable, 'lead_x_mm', n);
+leadY = numericOptionalColumn(rawTable, 'lead_y_mm', n);
+leadZ = numericOptionalColumn(rawTable, 'lead_z_mm', n);
+exitX = numericOptionalColumn(rawTable, 'exit_x_mm', n);
+exitY = numericOptionalColumn(rawTable, 'exit_y_mm', n);
+exitZ = numericOptionalColumn(rawTable, 'exit_z_mm', n);
+leadSpeed = numericOptionalColumn(rawTable, 'lead_speed_mm_s', n);
+
+if any(~isfinite(x) | ~isfinite(y) | ~isfinite(z))
+    error('x_mm, y_mm, and z_mm columns must all be finite numbers.');
+end
+if any(~isfinite(power))
+    error('The power column must contain only finite numbers.');
+end
+
+scanMask = mode == "scan";
+if any(scanMask)
+    if any(~isfinite(x2(scanMask)) | ~isfinite(y2(scanMask)) | ~isfinite(z2(scanMask)))
+        error('Rows with mode=scan must contain finite x2_mm, y2_mm, and z2_mm values.');
+    end
+    if any(~isfinite(scanSpeed(scanMask)) | scanSpeed(scanMask) <= 0)
+        error('Rows with mode=scan must contain positive scan_speed_mm_s values.');
+    end
+end
+
+cutMask = mode == "cut";
+if any(cutMask)
+    if any(~isfinite(x2(cutMask)) | ~isfinite(y2(cutMask)) | ~isfinite(z2(cutMask)))
+        error('Rows with mode=cut must contain finite x2_mm, y2_mm, and z2_mm values.');
+    end
+    if any(~isfinite(leadX(cutMask)) | ~isfinite(leadY(cutMask)) | ~isfinite(leadZ(cutMask)) | ...
+            ~isfinite(exitX(cutMask)) | ~isfinite(exitY(cutMask)) | ~isfinite(exitZ(cutMask)))
+        error('Rows with mode=cut must contain finite lead_* and exit_* coordinates.');
+    end
+    if any(~isfinite(scanSpeed(cutMask)) | scanSpeed(cutMask) <= 0)
+        error('Rows with mode=cut must contain positive scan_speed_mm_s values.');
+    end
+    missingLeadSpeed = isnan(leadSpeed(cutMask));
+    cutIndices = find(cutMask);
+    leadSpeed(cutIndices(missingLeadSpeed)) = scanSpeed(cutIndices(missingLeadSpeed));
+    if any(~isfinite(leadSpeed(cutMask)) | leadSpeed(cutMask) <= 0)
+        error('Rows with mode=cut must contain positive lead_speed_mm_s values.');
+    end
+end
+
+pointMask = mode == "point";
+if any(pointMask) && any(~isfinite(dwell(pointMask)) | dwell(pointMask) < 0)
+    error('Rows with mode=point must contain nonnegative dwell_s values.');
+end
+if any(isfinite(pauseSeconds) & pauseSeconds < 0)
+    error('pause_s cannot be negative.');
+end
+
+planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
+    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, ...
+    'VariableNames', expectedNames);
+
+if height(planTable) ~= n
+    error('The loaded writing plan has an invalid row count.');
+end
+end
+
+function modes = normalizeLoadedPlanModes(value)
+modes = lower(strtrim(string(value)));
+modes = regexprep(modes, '[\s-]+', '_');
+modes(modes == "axis_scan") = "scan";
+modes(modes == "point_dwell") = "point";
+modes(modes == "cut_scan" | modes == "hexagon_cut") = "cut";
+if any(~ismember(modes, ["point", "scan", "cut"]))
+    error('The mode column only supports point, scan, or cut.');
+end
+end
+
+function values = numericColumn(value, columnName)
+if isnumeric(value)
+    values = double(value);
+    values = values(:);
+    return;
+end
+
+textValue = strtrim(string(value(:)));
+values = str2double(textValue);
+values = values(:);
+missingMask = ismissing(textValue) | strlength(textValue) == 0 | strcmpi(textValue, "NaN") | strcmpi(textValue, "NA");
+values(missingMask) = nan;
+badText = isnan(values) & ~missingMask;
+if any(badText)
+    error('%s column contains values that cannot be parsed as numbers.', columnName);
+end
+end
+
+function values = numericOptionalColumn(rawTable, columnName, rowCount)
+if any(strcmp(rawTable.Properties.VariableNames, columnName))
+    values = numericColumn(rawTable.(columnName), columnName);
+else
+    values = nan(rowCount, 1);
+end
+end
+
+function data = writingPlanTableToPointData(planTable)
+data = [planTable.x_mm, planTable.y_mm, planTable.z_mm, planTable.power];
+end
+
+function summary = importedPlanSummary(planTable, fileName)
+[pointCount, scanCount, cutCount] = planOperationCounts(planTable);
+summary = struct();
+summary.pointCount = height(planTable);
+summary.sourcePointCount = height(planTable);
+summary.latticeLabel = 'Loaded Writing Plan';
+summary.layerTraversalLabel = 'File row order';
+summary.pathModeLabel = sprintf('File order (%d point dwells / %d axis scans / %d cuts)', pointCount, scanCount, cutCount);
+summary.powerModeLabel = 'File power column';
+summary.pitchLabel = ['Source file: ', fileName];
+summary.powerRange = [min(planTable.power), max(planTable.power)];
+summary.fileHint = ['Loaded: ', fileName];
+end
+
+function planTable = buildWritingPlanTable(data, planConfig)
+if isempty(data)
+    planTable = table();
+    return;
+end
+
+if size(data, 2) < 4
+    error('Generated data must include X, Y, Z, and power columns.');
+end
+
+n = size(data, 1);
+x = data(:, 1);
+y = data(:, 2);
+z = data(:, 3);
+power = data(:, 4);
+x2 = nan(n, 1);
+y2 = nan(n, 1);
+z2 = nan(n, 1);
+dwell = nan(n, 1);
+scanSpeed = nan(n, 1);
+pauseSeconds = repmat(planConfig.pauseSeconds, n, 1);
+leadX = nan(n, 1);
+leadY = nan(n, 1);
+leadZ = nan(n, 1);
+exitX = nan(n, 1);
+exitY = nan(n, 1);
+exitZ = nan(n, 1);
+leadSpeed = nan(n, 1);
+
+switch planConfig.mode
+    case "point_dwell"
+        mode = repmat("point", n, 1);
+        dwell(:) = planConfig.dwellSeconds;
+
+    case "axis_scan"
+        mode = repmat("scan", n, 1);
+        x2 = x;
+        y2 = y;
+        z2 = z;
+
+        axisIndex = find(["X", "Y", "Z"] == upper(planConfig.scanAxis), 1);
+        if isempty(axisIndex)
+            error('Unsupported scan axis: "%s".', planConfig.scanAxis);
+        end
+
+        directionSign = 1;
+        if planConfig.scanDirection == "negative"
+            directionSign = -1;
+        end
+
+        lengthMm = planConfig.scanLengthUm / 1000;
+        startShift = 0;
+        if planConfig.scanAnchor == "center_on_point"
+            startShift = -directionSign * lengthMm / 2;
+            endShift = directionSign * lengthMm / 2;
+        else
+            endShift = directionSign * lengthMm;
+        end
+
+        switch axisIndex
+            case 1
+                x = x + startShift;
+                x2 = data(:, 1) + endShift;
+            case 2
+                y = y + startShift;
+                y2 = data(:, 2) + endShift;
+            case 3
+                z = z + startShift;
+                z2 = data(:, 3) + endShift;
+        end
+
+        scanSpeed(:) = planConfig.scanSpeedMmPerSecond;
+
+    case "cut_scan"
+        if size(data, 2) < 14
+            error('Hexagon cut data must include cut end, lead-in, lead-out, and speed columns.');
+        end
+        mode = repmat("cut", n, 1);
+        x2 = data(:, 5);
+        y2 = data(:, 6);
+        z2 = data(:, 7);
+        leadX = data(:, 8);
+        leadY = data(:, 9);
+        leadZ = data(:, 10);
+        exitX = data(:, 11);
+        exitY = data(:, 12);
+        exitZ = data(:, 13);
+        scanSpeed = data(:, 14);
+        if size(data, 2) >= 15
+            leadSpeed = data(:, 15);
+        else
+            leadSpeed = scanSpeed;
+        end
+        if size(data, 2) >= 16
+            pauseSeconds = data(:, 16);
+        else
+            pauseSeconds = zeros(n, 1);
+        end
+        if any(~isfinite([x2; y2; z2; leadX; leadY; leadZ; exitX; exitY; exitZ]))
+            error('Hexagon cut coordinates must all be finite.');
+        end
+        if any(~isfinite(scanSpeed) | scanSpeed <= 0 | ~isfinite(leadSpeed) | leadSpeed <= 0)
+            error('Hexagon cut speeds must be finite positive values.');
+        end
+        if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
+            error('Hexagon cut pause values must be finite nonnegative values.');
+        end
+
+    otherwise
+        error('Unsupported exposure mode: "%s".', planConfig.mode);
+end
+
+if planConfig.mode ~= "cut_scan" && size(data, 2) >= 5
+    customPauseSeconds = data(:, 5);
+    if any(~isfinite(customPauseSeconds) | customPauseSeconds < 0)
+        error('Generated data column 5 pause_s must contain only finite nonnegative numbers.');
+    end
+    pauseSeconds = customPauseSeconds;
+end
+
+planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
+    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, ...
+    'VariableNames', writingPlanColumnNames());
+
+if ~isfield(planConfig, 'preserveOrder') || ~planConfig.preserveOrder
+    planTable = sortWritingPlanDeepToShallow(planTable);
+end
+end
+
+function planTable = sortWritingPlanDeepToShallow(planTable)
+if isempty(planTable) || height(planTable) < 2
+    return;
+end
+
+operationDepth = planTable.z_mm;
+scanMask = isfinite(planTable.z2_mm);
+operationDepth(scanMask) = min(operationDepth(scanMask), planTable.z2_mm(scanMask));
+leadMask = isfinite(planTable.lead_z_mm);
+operationDepth(leadMask) = min(operationDepth(leadMask), planTable.lead_z_mm(leadMask));
+exitMask = isfinite(planTable.exit_z_mm);
+operationDepth(exitMask) = min(operationDepth(exitMask), planTable.exit_z_mm(exitMask));
+rowIndex = (1:height(planTable)).';
+sortKeys = [operationDepth(:), rowIndex];
+[~, order] = sortrows(sortKeys, [1, 2]);
+planTable = planTable(order, :);
+end
+
+function value = validatePositiveScalar(value, label)
+if ~(isscalar(value) && isnumeric(value) && isfinite(value) && value > 0)
+    error('%s must be a finite positive number.', label);
+end
+end
+
+function value = validateNonnegativeScalar(value, label)
+if ~(isscalar(value) && isnumeric(value) && isfinite(value) && value >= 0)
+    error('%s must be a finite nonnegative number.', label);
+end
+end
+
+function value = normalizePlanOption(value)
+value = lower(string(value));
+value = regexprep(value, '[\s-]+', '_');
+end
+
+function [pointCount, scanCount, cutCount] = planOperationCounts(planTable)
+modes = string(planTable.mode);
+pointCount = nnz(modes == "point");
+scanCount = nnz(modes == "scan");
+cutCount = nnz(modes == "cut");
+end
+
+function [xValues, yValues, zValues] = planPreviewBounds(planTable)
+xValues = planTable.x_mm;
+yValues = planTable.y_mm;
+zValues = planTable.z_mm;
+
+scanMask = string(planTable.mode) == "scan";
+if any(scanMask)
+    xValues = [xValues; planTable.x2_mm(scanMask)];
+    yValues = [yValues; planTable.y2_mm(scanMask)];
+    zValues = [zValues; planTable.z2_mm(scanMask)];
+end
+
+cutMask = string(planTable.mode) == "cut";
+if any(cutMask)
+    xValues = [xValues; planTable.x2_mm(cutMask); planTable.lead_x_mm(cutMask); planTable.exit_x_mm(cutMask)];
+    yValues = [yValues; planTable.y2_mm(cutMask); planTable.lead_y_mm(cutMask); planTable.exit_y_mm(cutMask)];
+    zValues = [zValues; planTable.z2_mm(cutMask); planTable.lead_z_mm(cutMask); planTable.exit_z_mm(cutMask)];
+end
+
+xValues = xValues(isfinite(xValues));
+yValues = yValues(isfinite(yValues));
+zValues = zValues(isfinite(zValues));
+end
+
+function drawScanPreviewLines(ax, scanTable, colorValue)
+xLines = [scanTable.x_mm.'; scanTable.x2_mm.'; nan(1, height(scanTable))];
+yLines = [scanTable.y_mm.'; scanTable.y2_mm.'; nan(1, height(scanTable))];
+zLines = [scanTable.z_mm.'; scanTable.z2_mm.'; nan(1, height(scanTable))];
+plot3(ax, xLines(:), yLines(:), zLines(:), '-', 'Color', colorValue, 'LineWidth', 1.2);
+
+arrowLimit = min(height(scanTable), 2000);
+if arrowLimit == 0
+    return;
+end
+arrowIdx = unique(round(linspace(1, height(scanTable), arrowLimit)));
+u = scanTable.x2_mm(arrowIdx) - scanTable.x_mm(arrowIdx);
+v = scanTable.y2_mm(arrowIdx) - scanTable.y_mm(arrowIdx);
+w = scanTable.z2_mm(arrowIdx) - scanTable.z_mm(arrowIdx);
+quiver3(ax, scanTable.x_mm(arrowIdx), scanTable.y_mm(arrowIdx), scanTable.z_mm(arrowIdx), ...
+    u, v, w, 0, 'Color', colorValue, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
+end
+
+function drawCutPreviewLines(ax, cutTable)
+leadColor = [0.45, 0.45, 0.45];
+cutColor = [0.9, 0.12, 0.08];
+
+leadX = [cutTable.lead_x_mm.'; cutTable.x_mm.'; nan(1, height(cutTable))];
+leadY = [cutTable.lead_y_mm.'; cutTable.y_mm.'; nan(1, height(cutTable))];
+leadZ = [cutTable.lead_z_mm.'; cutTable.z_mm.'; nan(1, height(cutTable))];
+plot3(ax, leadX(:), leadY(:), leadZ(:), '--', 'Color', leadColor, 'LineWidth', 0.9);
+
+cutX = [cutTable.x_mm.'; cutTable.x2_mm.'; nan(1, height(cutTable))];
+cutY = [cutTable.y_mm.'; cutTable.y2_mm.'; nan(1, height(cutTable))];
+cutZ = [cutTable.z_mm.'; cutTable.z2_mm.'; nan(1, height(cutTable))];
+plot3(ax, cutX(:), cutY(:), cutZ(:), '-', 'Color', cutColor, 'LineWidth', 1.5);
+
+exitX = [cutTable.x2_mm.'; cutTable.exit_x_mm.'; nan(1, height(cutTable))];
+exitY = [cutTable.y2_mm.'; cutTable.exit_y_mm.'; nan(1, height(cutTable))];
+exitZ = [cutTable.z2_mm.'; cutTable.exit_z_mm.'; nan(1, height(cutTable))];
+plot3(ax, exitX(:), exitY(:), exitZ(:), ':', 'Color', leadColor, 'LineWidth', 1.0);
+
+arrowLimit = min(height(cutTable), 2000);
+if arrowLimit == 0
+    return;
+end
+arrowIdx = unique(round(linspace(1, height(cutTable), arrowLimit)));
+u = cutTable.x2_mm(arrowIdx) - cutTable.x_mm(arrowIdx);
+v = cutTable.y2_mm(arrowIdx) - cutTable.y_mm(arrowIdx);
+w = cutTable.z2_mm(arrowIdx) - cutTable.z_mm(arrowIdx);
+quiver3(ax, cutTable.x_mm(arrowIdx), cutTable.y_mm(arrowIdx), cutTable.z_mm(arrowIdx), ...
+    u, v, w, 0, 'Color', cutColor, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
+end
+
+function tips = parameterTooltips()
+tips = struct();
+tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges with laser-off lead-in/out moves.';
+tips.counts = { ...
+    'Number of generated points along X; must be a positive integer.', ...
+    'Number of generated points along Y; must be a positive integer.', ...
+    'Number of generated layers or points along Z; must be a positive integer.'};
+tips.cartesianPitch = { ...
+    'Spacing between adjacent points along X, in um.', ...
+    'Spacing between adjacent points along Y, in um.', ...
+    'Spacing between adjacent Z layers, in um.'};
+tips.hexPitch = { ...
+    'Neighbor spacing for Hex/HCP lattices in the XY plane, in um.', ...
+    'Spacing between adjacent Z layers for Hex/HCP lattices, in um.'};
+tips.origin = { ...
+    'Overall lattice X origin or offset, in um.', ...
+    'Overall lattice Y origin or offset, in um.', ...
+    'Overall lattice Z origin or offset, in um.'};
+tips.hcpShift = { ...
+    'X offset of HCP B layers relative to A layers, in um.', ...
+    'Y offset of HCP B layers relative to A layers, in um.'};
+tips.stepConfig = { ...
+    'Number of depth layers in Staircase mode.', ...
+    'Z coordinate of the first Staircase layer, in um.', ...
+    'Z step between adjacent depth layers, in um; smaller Z is deeper.'};
+tips.powerColumns = { ...
+    'Number of power columns in Staircase mode.', ...
+    'Power value used by the first Staircase column.', ...
+    'Power value used by the last Staircase column; intermediate columns are interpolated linearly.'};
+tips.patchCounts = { ...
+    'Number of points along X in each Staircase patch.', ...
+    'Number of points along Y in each Staircase patch.'};
+tips.patchPitch = { ...
+    'X spacing inside each Staircase patch, in um.', ...
+    'Y spacing inside each Staircase patch, in um.'};
+tips.gap = { ...
+    'Blank X gap between adjacent Staircase patches, in um.', ...
+    'Blank Y gap between adjacent Staircase patches, in um.'};
+tips.staircaseOrigin = { ...
+    'Overall Staircase array X origin or offset, in um.', ...
+    'Overall Staircase array Y origin or offset, in um.'};
+tips.gratingAxes = { ...
+    'Depth direction for the segmented grating; depth layers are emitted from start and step.', ...
+    'Period direction for the 1D QPM pattern; the scan direction automatically uses the remaining coordinate axis.'};
+tips.gratingDepth = { ...
+    'Number of depth layers in the segmented grating.', ...
+    'Depth-axis coordinate of the first layer relative to the origin, in um.', ...
+    'Depth-axis step between adjacent layers, in um; for Z depth, smaller Z is deeper.'};
+tips.gratingSegmentOne = { ...
+    'Period of segment 1 in the 1D QPM pattern, in um.', ...
+    'Number of periods in segment 1.'};
+tips.gratingSegmentTwo = { ...
+    'Period of segment 2 in the 1D QPM pattern, in um.', ...
+    'Number of periods in segment 2.', ...
+    'Gap from the last segment 1 period position to the start of segment 2 along the period axis, in um; defaults to the segment 1 period.'};
+tips.gratingSlabOne = { ...
+    'Number of adjacent scan lines written at each segment 1 period position to form a thicker slab.', ...
+    'Spacing along the period axis between adjacent scan lines in the same segment 1 slab, in um.'};
+tips.gratingSlabTwo = { ...
+    'Number of adjacent scan lines written at each segment 2 period position to form a thicker slab.', ...
+    'Spacing along the period axis between adjacent scan lines in the same segment 2 slab, in um.'};
+tips.gratingChannel = { ...
+    'Rows in the segmented grating channel matrix; channels are written row by row and column by column for each depth layer.', ...
+    'Columns in the segmented grating channel matrix; channels are written row by row and column by column for each depth layer.', ...
+    'Origin offset between adjacent channel rows, defaulting to the depth axis, in um; sign controls direction.', ...
+    'Origin offset between adjacent channel columns, defaulting to the scan axis, in um; sign controls direction.'};
+tips.gratingChannelStarts = [ ...
+    'Table cells map to channel positions: R1/C1 is row 1 column 1, R2/C1 is row 2 column 1;', ...
+    'The first table gives segment 1 grating start positions, and the second table gives segment 2 start positions, in um;', ...
+    'Enter only one number per cell; blank or N skips that segment for that channel.'];
+tips.gratingScan = { ...
+    'Length of each segmented grating slab scan line, in um.'};
+tips.zPushOrigin = { ...
+    'Reference X coordinate before push starts, in um.', ...
+    'Reference Y coordinate before push starts, in um.', ...
+    'Surface or initial Z coordinate, in um; the first step writes at Z0 - step.'};
+tips.zPushMove = { ...
+    'X offset from the initial X coordinate, in um.', ...
+    'Y offset from the initial Y coordinate, in um.'};
+tips.zPushConfig = { ...
+    'Number of pushes along -Z; must be a positive integer.', ...
+    'Distance for each -Z push, in um; for example, 10 means 10 um per step.', ...
+    'Wait time after each push reaches position; written to pause_s, in seconds.'};
+tips.hexCutCenter = { ...
+    'Center X coordinate of the hexagon, in um.', ...
+    'Center Y coordinate of the hexagon, in um.', ...
+    'Fixed Z coordinate of the hexagon cut plane, in um.'};
+tips.hexCutGeometry = { ...
+    'Side length of the regular hexagon, in um.', ...
+    'Rotation angle of the first vertex around the center, in degrees.'};
+tips.hexCutDirection = 'Order used to cut the six hexagon edges.';
+tips.hexCutMotion = { ...
+    'Laser power used during each exposed edge.', ...
+    'Target stage speed during the exposed cut, in mm/s.', ...
+    'Stage acceleration used to estimate the laser-off lead-in distance, in mm/s^2.', ...
+    'Multiplier applied to v^2/(2a) for the lead-in distance before each cut start.', ...
+    'Multiplier applied to v^2/(2a) for the laser-off lead-out distance after each cut end.'};
+tips.powerMode = 'Choose how the power column is generated for each point: fixed value, formula, or linear interpolation by Z depth.';
+tips.fixedPower = 'Single power value used for all points in fixed-power mode.';
+tips.powerFormula = 'Custom power formula; x, y, and z variables are in um.';
+tips.powerPointsArea = 'Enter one "z_um, power" pair per line. The app linearly interpolates power by Z depth.';
+tips.pathMode = 'Controls writing order within the same Z layer: row-major uses the same direction per row; serpentine reverses adjacent rows to reduce travel.';
+tips.exposureMode = 'Choose the exposure mode for the writing plan: point dwell opens the shutter at each point; axis scan moves from a start point to an end point.';
+tips.dwellSeconds = 'Exposure time for each point in point-dwell mode, in seconds.';
+tips.scanAxis = 'Coordinate axis used for axis scans.';
+tips.scanDirection = 'Axis scans move from the start point in the positive or negative coordinate direction; positive Z corresponds to deep-to-shallow.';
+tips.scanAnchor = 'Centered on point means the scan segment is centered on the source point; start at point means the source point is the scan start.';
+tips.scanLength = 'Length of each axis scan, in um.';
+tips.scanSpeed = 'Stage speed during axis scans, in mm/s.';
+tips.pauseSeconds = 'Settling time after the stage reaches a point or scan start before exposure or scanning, in seconds.';
+tips.previewRows = 'Maximum number of plan rows shown in the table; saving still writes every row.';
+end
+function [rowPanel, dropdown] = createDropdownRow(parent, labelText, items, defaultValue, callback, itemData, tooltipText)
+if nargin < 7
+    tooltipText = '';
+end
+
 rowPanel = uipanel(parent, 'BorderType', 'none');
 
 grid = uigridlayout(rowPanel, [1, 2]);
-grid.ColumnWidth = {110, '1x'};
+grid.ColumnWidth = {142, '1x'};
 grid.RowHeight = {'fit'};
-grid.ColumnSpacing = 8;
+grid.ColumnSpacing = 5;
 grid.Padding = [0, 0, 0, 0];
 
-label = uilabel(grid, 'Text', labelText);
+label = uilabel(grid, 'Text', labelText, 'WordWrap', 'on');
 label.Layout.Row = 1;
 label.Layout.Column = 1;
 
-dropdown = uidropdown(grid, 'Items', items, 'Value', defaultValue);
+if nargin < 6 || isempty(itemData)
+    dropdown = uidropdown(grid, 'Items', items, 'Value', defaultValue);
+else
+    dropdown = uidropdown(grid, 'Items', items, 'ItemsData', itemData, 'Value', defaultValue);
+end
 dropdown.Layout.Row = 1;
 dropdown.Layout.Column = 2;
+applyTooltip({rowPanel, label, dropdown}, tooltipText);
 
 if ~isempty(callback)
     dropdown.ValueChangedFcn = callback;
 end
 end
 
-function [rowPanel, field] = createNumericRow(parent, labelText, defaultValue)
+function [panel, dropdowns] = createDropdownPanel(parent, titleText, labelTexts, items, defaultValues, callback, tooltipTexts)
+if nargin < 7
+    tooltipTexts = '';
+end
+
+labelTexts = cellstr(string(labelTexts));
+defaultValues = cellstr(string(defaultValues));
+count = numel(labelTexts);
+if ischar(items) || isstring(items)
+    items = cellstr(string(items));
+end
+
+if isempty(tooltipTexts)
+    tooltipTexts = repmat({''}, 1, count);
+else
+    tooltipTexts = cellstr(string(tooltipTexts));
+    if isscalar(tooltipTexts) && count > 1
+        tooltipTexts = repmat(tooltipTexts, 1, count);
+    elseif numel(tooltipTexts) < count
+        tooltipTexts(end + 1:count) = {''};
+    elseif numel(tooltipTexts) > count
+        tooltipTexts = tooltipTexts(1:count);
+    end
+end
+
+panel = uipanel(parent, 'BorderType', 'none');
+
+grid = uigridlayout(panel, [2, 1 + count]);
+grid.RowHeight = {'fit', 'fit'};
+grid.ColumnWidth = [{128}, repmat({'1x'}, 1, count)];
+grid.RowSpacing = 0;
+grid.ColumnSpacing = 6;
+grid.Padding = [0, 0, 0, 0];
+
+titleLabel = uilabel(grid, 'Text', titleText, 'WordWrap', 'on');
+titleLabel.Layout.Row = [1, 2];
+titleLabel.Layout.Column = 1;
+nonemptyTips = string(tooltipTexts);
+nonemptyTips = nonemptyTips(strlength(nonemptyTips) > 0);
+applyTooltip({panel, titleLabel}, strjoin(nonemptyTips, newline));
+
+dropdowns = gobjects(1, count);
+for i = 1:count
+    fieldColumn = 1 + i;
+
+    label = uilabel(grid, 'Text', labelTexts{i}, 'HorizontalAlignment', 'center', 'WordWrap', 'on');
+    label.Layout.Row = 1;
+    label.Layout.Column = fieldColumn;
+
+    dropdown = uidropdown(grid, 'Items', items, 'Value', defaultValues{i});
+    dropdown.Layout.Row = 2;
+    dropdown.Layout.Column = fieldColumn;
+    if ~isempty(callback)
+        dropdown.ValueChangedFcn = callback;
+    end
+    applyTooltip({label, dropdown}, tooltipTexts{i});
+    dropdowns(i) = dropdown;
+end
+end
+
+function [rowPanel, field] = createNumericRow(parent, labelText, defaultValue, tooltipText)
+if nargin < 4
+    tooltipText = '';
+end
+
 rowPanel = uipanel(parent, 'BorderType', 'none');
 
 grid = uigridlayout(rowPanel, [1, 2]);
-grid.ColumnWidth = {110, '1x'};
+grid.ColumnWidth = {142, '1x'};
 grid.RowHeight = {'fit'};
-grid.ColumnSpacing = 8;
+grid.ColumnSpacing = 5;
 grid.Padding = [0, 0, 0, 0];
 
-label = uilabel(grid, 'Text', labelText);
+label = uilabel(grid, 'Text', labelText, 'WordWrap', 'on');
 label.Layout.Row = 1;
 label.Layout.Column = 1;
 
 field = uieditfield(grid, 'numeric', 'Value', defaultValue);
 field.Layout.Row = 1;
 field.Layout.Column = 2;
+applyTooltip({rowPanel, label, field}, tooltipText);
 end
 
-function [rowPanel, field] = createTextRow(parent, labelText, defaultValue)
+function [rowPanel, field] = createTextRow(parent, labelText, defaultValue, tooltipText)
+if nargin < 4
+    tooltipText = '';
+end
+
 rowPanel = uipanel(parent, 'BorderType', 'none');
 
 grid = uigridlayout(rowPanel, [1, 2]);
-grid.ColumnWidth = {110, '1x'};
+grid.ColumnWidth = {142, '1x'};
 grid.RowHeight = {'fit'};
-grid.ColumnSpacing = 8;
+grid.ColumnSpacing = 5;
 grid.Padding = [0, 0, 0, 0];
 
-label = uilabel(grid, 'Text', labelText);
+label = uilabel(grid, 'Text', labelText, 'WordWrap', 'on');
 label.Layout.Row = 1;
 label.Layout.Column = 1;
 
 field = uieditfield(grid, 'text', 'Value', defaultValue);
 field.Layout.Row = 1;
 field.Layout.Column = 2;
+applyTooltip({rowPanel, label, field}, tooltipText);
 end
 
-function [panel, fields] = createValuePanel(parent, titleText, labelTexts, defaultValues)
-panel = uipanel(parent, 'Title', titleText);
+function [panel, fields] = createValuePanel(parent, titleText, labelTexts, defaultValues, tooltipTexts)
+if nargin < 5
+    tooltipTexts = '';
+end
+
+[panel, fields] = createValuePanelWithSlots(parent, titleText, labelTexts, defaultValues, numel(labelTexts), tooltipTexts);
+end
+
+function [panel, fields] = createValuePanelWithSlots(parent, titleText, labelTexts, defaultValues, slotCount, tooltipTexts)
+if nargin < 6
+    tooltipTexts = '';
+end
+
+panel = uipanel(parent, 'BorderType', 'none');
 
 labelTexts = cellstr(string(labelTexts));
 defaultValues = reshape(defaultValues, 1, []);
 count = numel(labelTexts);
+if nargin < 5 || isempty(tooltipTexts)
+    tooltipTexts = repmat({''}, 1, count);
+else
+    tooltipTexts = cellstr(string(tooltipTexts));
+    if isscalar(tooltipTexts) && count > 1
+        tooltipTexts = repmat(tooltipTexts, 1, count);
+    elseif numel(tooltipTexts) < count
+        tooltipTexts(end + 1:count) = {''};
+    elseif numel(tooltipTexts) > count
+        tooltipTexts = tooltipTexts(1:count);
+    end
+end
 
-grid = uigridlayout(panel, [2, count]);
+slotCount = max(slotCount, count);
+
+grid = uigridlayout(panel, [2, 1 + slotCount]);
 grid.RowHeight = {'fit', 'fit'};
-grid.ColumnWidth = repmat({'1x'}, 1, count);
-grid.RowSpacing = 4;
-grid.ColumnSpacing = 8;
-grid.Padding = [8, 8, 8, 8];
+grid.ColumnWidth = [{128}, repmat({'1x'}, 1, slotCount)];
+grid.RowSpacing = 0;
+grid.ColumnSpacing = 6;
+grid.Padding = [0, 0, 0, 0];
+
+titleLabel = uilabel(grid, 'Text', titleText, 'WordWrap', 'on');
+titleLabel.Layout.Row = [1, 2];
+titleLabel.Layout.Column = 1;
+nonemptyTips = string(tooltipTexts);
+nonemptyTips = nonemptyTips(strlength(nonemptyTips) > 0);
+applyTooltip({panel, titleLabel}, strjoin(nonemptyTips, newline));
 
 fields = gobjects(1, count);
 for i = 1:count
-    label = uilabel(grid, 'Text', labelTexts{i}, 'HorizontalAlignment', 'center');
+    fieldColumn = 1 + i;
+
+    label = uilabel(grid, 'Text', labelTexts{i}, 'HorizontalAlignment', 'center', 'WordWrap', 'on');
     label.Layout.Row = 1;
-    label.Layout.Column = i;
+    label.Layout.Column = fieldColumn;
 
     field = uieditfield(grid, 'numeric', 'Value', defaultValues(i));
     field.Layout.Row = 2;
-    field.Layout.Column = i;
+    field.Layout.Column = fieldColumn;
+    applyTooltip({label, field}, tooltipTexts{i});
     fields(i) = field;
+end
+end
+
+function applyTooltip(components, tooltipText)
+if nargin < 2 || isempty(tooltipText)
+    return;
+end
+
+tooltipText = string(tooltipText);
+if all(strlength(tooltipText) == 0)
+    return;
+end
+
+tooltipText = char(strjoin(tooltipText, newline));
+if ~iscell(components)
+    components = {components};
+end
+
+for i = 1:numel(components)
+    component = components{i};
+    if ~isempty(component) && isvalid(component) && isprop(component, 'Tooltip')
+        component.Tooltip = tooltipText;
+    end
 end
 end
 
@@ -625,6 +1980,54 @@ else
 end
 end
 
+function position = compactFigurePosition()
+screen = get(groot, 'ScreenSize');
+screenLeft = screen(1);
+screenBottom = screen(2);
+screenWidth = screen(3);
+screenHeight = screen(4);
+
+figureWidth = min(1440, screenWidth - 60);
+figureHeight = min(860, screenHeight - 90);
+figureWidth = max(1180, figureWidth);
+figureHeight = max(700, figureHeight);
+
+if figureWidth > screenWidth - 20
+    figureWidth = max(760, screenWidth - 20);
+end
+if figureHeight > screenHeight - 40
+    figureHeight = max(560, screenHeight - 40);
+end
+
+figureLeft = screenLeft + max(10, round((screenWidth - figureWidth) / 2));
+figureBottom = screenBottom + max(30, round((screenHeight - figureHeight) / 2));
+position = round([figureLeft, figureBottom, figureWidth, figureHeight]);
+end
+
+function applyCompactFonts(fig)
+items = findall(fig);
+for i = 1:numel(items)
+    if isprop(items(i), 'FontSize')
+        try
+            items(i).FontSize = 11;
+        catch
+            % Some uifigure-backed objects report FontSize but do not allow assignment.
+        end
+    end
+end
+end
+
+function name = exposureModeDisplayName(value)
+switch string(value)
+    case "Point dwell"
+        name = 'Point dwell';
+    case "Axis scan"
+        name = 'Axis scan';
+    otherwise
+        name = char(value);
+end
+end
+
 function plotIdx = localPreviewIndices(pointCount, pointLimit)
 if pointCount <= pointLimit
     plotIdx = (1:pointCount).';
@@ -635,6 +2038,13 @@ plotIdx = unique(round(linspace(1, pointCount, pointLimit))).';
 end
 
 function applyPreviewLimits3D(ax, xValues, yValues, zValues)
+xValues = xValues(isfinite(xValues));
+yValues = yValues(isfinite(yValues));
+zValues = zValues(isfinite(zValues));
+if isempty(xValues) || isempty(yValues) || isempty(zValues)
+    return;
+end
+
 mins = [min(xValues), min(yValues), min(zValues)];
 maxs = [max(xValues), max(yValues), max(zValues)];
 center = (mins + maxs) / 2;
@@ -644,10 +2054,27 @@ if ~isfinite(span) || span <= 0
     span = 0.001;
 end
 
-halfSpan = span * 0.55;
-xlim(ax, [center(1) - halfSpan, center(1) + halfSpan]);
-ylim(ax, [center(2) - halfSpan, center(2) + halfSpan]);
-zlim(ax, [center(3) - halfSpan, center(3) + halfSpan]);
-axis(ax, 'equal');
+halfSpan = span * 0.62;
+limits = [center(:) - halfSpan, center(:) + halfSpan];
+
+axis(ax, 'normal');
+ax.DataAspectRatioMode = 'auto';
+ax.PlotBoxAspectRatioMode = 'auto';
+xlim(ax, limits(1, :));
+ylim(ax, limits(2, :));
+zlim(ax, limits(3, :));
+pbaspect(ax, [1, 1, 1]);
+daspect(ax, [1, 1, 1]);
+xlim(ax, limits(1, :));
+ylim(ax, limits(2, :));
+zlim(ax, limits(3, :));
+ax.CameraViewAngleMode = 'auto';
 view(ax, 30, 25);
+applyPreviewAxisOrientation(ax);
+end
+
+function applyPreviewAxisOrientation(ax)
+ax.XDir = 'normal';
+ax.YDir = 'normal';
+ax.ZDir = 'normal';
 end

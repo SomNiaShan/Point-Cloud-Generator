@@ -12,6 +12,20 @@ if latticeTypeStr == "staircase"
     [data, prefix, summary] = localGenerateStaircaseFull(lattice);
     return;
 end
+if latticeTypeStr == "segmented_grating"
+    power = localRequireStruct(params, 'power');
+    [data, prefix, summary] = localGenerateSegmentedGratingFull(lattice, power);
+    return;
+end
+if latticeTypeStr == "z_push"
+    power = localRequireStruct(params, 'power');
+    [data, prefix, summary] = localGenerateZPushFull(lattice, power);
+    return;
+end
+if latticeTypeStr == "hexagon_cut"
+    [data, prefix, summary] = localGenerateHexagonCutFull(lattice);
+    return;
+end
 
 region = localRequireStruct(params, 'region');
 power = localRequireStruct(params, 'power');
@@ -68,19 +82,19 @@ summary.pathMode = char(pathMode);
 summary.pathModeLabel = localPathModeLabel(pathMode);
 summary.powerMode = char(powerMode);
 summary.powerModeLabel = localPowerModeLabel(powerMode);
-summary.layerTraversalLabel = 'Layer-by-layer';
+summary.layerTraversalLabel = 'Deep to shallow (ascending Z; smaller Z is deeper)';
 summary.prefix = prefix;
 end
 
 function [data, prefix, summary] = localGenerateStaircaseFull(lattice)
-nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth count');
+nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth Count');
 zStartUm = localFiniteScalar(localRequireField(lattice, 'zStartUm'), 'Z Start');
 zStepUm = localFiniteScalar(localRequireField(lattice, 'zStepUm'), 'Z Step');
 if zStepUm == 0
     error('Z Step must be non-zero.');
 end
 
-nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power count');
+nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
 powerStart = localFiniteScalar(localRequireField(lattice, 'powerStart'), 'Power start');
 powerEnd = localFiniteScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
 
@@ -137,6 +151,7 @@ xMm = xUm / 1000;
 yMm = yUm / 1000;
 zMm = zUm / 1000;
 data = [xMm, yMm, zMm, pVals];
+data = localSortRowsByZAscending(data);
 
 prefix = localBuildStaircasePrefix( ...
     nDepths, nPowers, zStartUm, zStepUm, powerStart, powerEnd, ...
@@ -166,6 +181,485 @@ summary.layerTraversalLabel = localStaircaseTraversalLabel(zStepUm);
 summary.prefix = prefix;
 end
 
+function [data, prefix, summary] = localGenerateSegmentedGratingFull(lattice, power)
+nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth Count');
+depthStartUm = localFiniteScalar(localRequireField(lattice, 'depthStartUm'), 'Depth start');
+depthStepUm = localFiniteScalar(localRequireField(lattice, 'depthStepUm'), 'Depth step');
+if depthStepUm == 0
+    error('Depth step must be non-zero.');
+end
+
+period1Um = localPositiveScalar(localRequireField(lattice, 'period1Um'), 'Segment 1 period');
+nPeriods1 = localPositiveInteger(localRequireField(lattice, 'nPeriods1'), 'Segment 1 period count');
+period2Um = localPositiveScalar(localRequireField(lattice, 'period2Um'), 'Segment 2 period');
+nPeriods2 = localPositiveInteger(localRequireField(lattice, 'nPeriods2'), 'Segment 2 period count');
+segmentGapUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'segmentGapUm', period1Um), 'Segment Gap');
+defaultSlabCopies = localFieldOrDefault(lattice, 'slabCopies', 1);
+defaultSlabPitchUm = localFieldOrDefault(lattice, 'slabPitchUm', 0);
+slabCopies1 = localPositiveInteger(localFieldOrDefault(lattice, 'slabCopies1', defaultSlabCopies), 'Segment 1 slab copies');
+slabPitch1Um = localNonnegativeScalar(localFieldOrDefault(lattice, 'slabPitch1Um', defaultSlabPitchUm), 'Segment 1 slab pitch');
+slabCopies2 = localPositiveInteger(localFieldOrDefault(lattice, 'slabCopies2', defaultSlabCopies), 'Segment 2 slab copies');
+slabPitch2Um = localNonnegativeScalar(localFieldOrDefault(lattice, 'slabPitch2Um', defaultSlabPitchUm), 'Segment 2 slab pitch');
+if slabCopies1 > 1 && slabPitch1Um <= 0
+    error('When segment 1 slab copies is greater than 1, segment 1 slab pitch must be greater than 0.');
+end
+if slabCopies2 > 1 && slabPitch2Um <= 0
+    error('When segment 2 slab copies is greater than 1, segment 2 slab pitch must be greater than 0.');
+end
+
+originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
+depthAxis = localAxisIndex(localFieldOrDefault(lattice, 'depthAxis', 'X'), 'Depth Axis');
+periodAxis = localAxisIndex(localFieldOrDefault(lattice, 'periodAxis', 'Y'), 'Period Axis');
+if depthAxis == periodAxis
+    error('Depth axis and period axis cannot be the same.');
+end
+
+scanAxis = setdiff(1:3, [depthAxis, periodAxis]);
+depthAxisName = localAxisName(depthAxis);
+periodAxisName = localAxisName(periodAxis);
+scanAxisName = localAxisName(scanAxis);
+
+channelRows = localPositiveInteger(localFieldOrDefault(lattice, 'channelRows', 1), 'Channel rows');
+channelCols = localPositiveInteger(localFieldOrDefault(lattice, 'channelCols', 1), 'Channel columns');
+channelRowPitchUm = localFiniteScalar(localFieldOrDefault(lattice, 'channelRowPitchUm', 0), 'Channel row pitch');
+channelColPitchUm = localFiniteScalar(localFieldOrDefault(lattice, 'channelColPitchUm', 0), 'Channel column pitch');
+if channelRows > 1 && channelRowPitchUm == 0
+    error('When channel rows is greater than 1, channel row pitch must be non-zero.');
+end
+if channelCols > 1 && channelColPitchUm == 0
+    error('When channel columns is greater than 1, channel column pitch must be non-zero.');
+end
+
+rowAxis = depthAxis;
+colAxis = scanAxis;
+rowAxisName = localAxisName(rowAxis);
+colAxisName = localAxisName(colAxis);
+channelCount = channelRows * channelCols;
+[channelSegmentOneStartUm, channelSegmentTwoStartUm, ...
+    channelSegmentOneEnabled, channelSegmentTwoEnabled, customChannelStartCount] = ...
+    localSegmentedGratingChannelStarts(lattice, channelRows, channelCols, period1Um, nPeriods1, segmentGapUm);
+channelRowOrder = localSegmentedGratingChannelRowOrder(channelRows, originUm, rowAxis, channelRowPitchUm, depthAxis);
+
+segmentPeriods = [repmat(period1Um, nPeriods1, 1); repmat(period2Um, nPeriods2, 1)];
+segmentIndex = [ones(nPeriods1, 1); 2 * ones(nPeriods2, 1)];
+segmentOnePeriodOffsets = (0:nPeriods1 - 1).' * period1Um;
+segmentTwoPeriodOffsets = (0:nPeriods2 - 1).' * period2Um;
+depthOffsets = depthStartUm + (0:nDepths - 1) * depthStepUm;
+depthOffsets = localSegmentedGratingDepthOffsets(depthOffsets, depthAxis);
+
+channelOperationCounts = double(channelSegmentOneEnabled) * nPeriods1 * slabCopies1 + ...
+    double(channelSegmentTwoEnabled) * nPeriods2 * slabCopies2;
+totalOperations = nDepths * sum(channelOperationCounts(:));
+if totalOperations == 0
+    error('The channel start table did not enable any grating segments.');
+end
+xUm = zeros(totalOperations, 1);
+yUm = zeros(totalOperations, 1);
+zUm = zeros(totalOperations, 1);
+
+cursor = 1;
+for iDepth = 1:nDepths
+    depthOffset = depthOffsets(iDepth);
+
+    for iChannelRow = channelRowOrder
+        for iChannelCol = 1:channelCols
+            channelOriginUm = originUm;
+            channelOriginUm(rowAxis) = channelOriginUm(rowAxis) + (iChannelRow - 1) * channelRowPitchUm;
+            channelOriginUm(colAxis) = channelOriginUm(colAxis) + (iChannelCol - 1) * channelColPitchUm;
+
+            if channelSegmentOneEnabled(iChannelRow, iChannelCol)
+                segmentOneStarts = channelSegmentOneStartUm(iChannelRow, iChannelCol) + segmentOnePeriodOffsets;
+                for iPeriod = 1:numel(segmentOneStarts)
+                    for iCopy = 1:slabCopies1
+                        pointUm = channelOriginUm;
+                        pointUm(depthAxis) = channelOriginUm(depthAxis) + depthOffset;
+                        pointUm(periodAxis) = channelOriginUm(periodAxis) + segmentOneStarts(iPeriod) + (iCopy - 1) * slabPitch1Um;
+
+                        xUm(cursor) = pointUm(1);
+                        yUm(cursor) = pointUm(2);
+                        zUm(cursor) = pointUm(3);
+                        cursor = cursor + 1;
+                    end
+                end
+            end
+
+            if channelSegmentTwoEnabled(iChannelRow, iChannelCol)
+                segmentTwoStarts = channelSegmentTwoStartUm(iChannelRow, iChannelCol) + segmentTwoPeriodOffsets;
+                for iPeriod = 1:numel(segmentTwoStarts)
+                    for iCopy = 1:slabCopies2
+                        pointUm = channelOriginUm;
+                        pointUm(depthAxis) = channelOriginUm(depthAxis) + depthOffset;
+                        pointUm(periodAxis) = channelOriginUm(periodAxis) + segmentTwoStarts(iPeriod) + (iCopy - 1) * slabPitch2Um;
+
+                        xUm(cursor) = pointUm(1);
+                        yUm(cursor) = pointUm(2);
+                        zUm(cursor) = pointUm(3);
+                        cursor = cursor + 1;
+                    end
+                end
+            end
+        end
+    end
+end
+
+powerMode = localPowerMode(power);
+powerValues = localEvaluatePower(power, powerMode, xUm, yUm, zUm);
+
+xMm = xUm / 1000;
+yMm = yUm / 1000;
+zMm = zUm / 1000;
+data = [xMm, yMm, zMm, powerValues];
+
+prefix = localBuildSegmentedGratingPrefix( ...
+    depthAxisName, periodAxisName, scanAxisName, nDepths, depthStartUm, depthStepUm, ...
+    period1Um, nPeriods1, period2Um, nPeriods2, segmentGapUm, ...
+    slabCopies1, slabPitch1Um, slabCopies2, slabPitch2Um, ...
+    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, power);
+
+summary = struct();
+summary.pointCount = totalOperations;
+summary.sourcePointCount = totalOperations;
+summary.xRangeMm = [min(xMm), max(xMm)];
+summary.yRangeMm = [min(yMm), max(yMm)];
+summary.zRangeMm = [min(zMm), max(zMm)];
+summary.powerRange = [min(powerValues), max(powerValues)];
+summary.latticeType = 'segmented_grating';
+summary.latticeLabel = 'Segmented Grating';
+summary.pitchLabel = sprintf(['depth axis %s, period axis %s, scan axis %s; channels %dx%d (row axis %s/%s um, column axis %s/%s um); ', ...
+    'segment 1: %d periods x %s um, slab %d lines/%s um; segment gap %s um; ', ...
+    'segment 2: %d periods x %s um, slab %d lines/%s um'], ...
+    depthAxisName, periodAxisName, scanAxisName, ...
+    channelRows, channelCols, rowAxisName, localCompactNumber(channelRowPitchUm), ...
+    colAxisName, localCompactNumber(channelColPitchUm), ...
+    nPeriods1, localCompactNumber(period1Um), ...
+    slabCopies1, localCompactNumber(slabPitch1Um), ...
+    localCompactNumber(segmentGapUm), ...
+    nPeriods2, localCompactNumber(period2Um), ...
+    slabCopies2, localCompactNumber(slabPitch2Um));
+summary.rowSpacingUm = min(segmentPeriods);
+summary.regionMode = 'segmented_grating';
+summary.regionLabel = sprintf('%dx%d two-segment channel matrix', channelRows, channelCols);
+summary.pathMode = 'depth_layered';
+summary.pathModeLabel = sprintf('depth-layered; channels row-by-row and column-by-column; segment 1 before segment 2 within each channel (%s scan)', scanAxisName);
+summary.powerMode = char(powerMode);
+summary.powerModeLabel = localPowerModeLabel(powerMode);
+summary.layerTraversalLabel = localSegmentedGratingTraversalLabel(depthStepUm, depthAxisName);
+summary.prefix = prefix;
+summary.depthAxis = depthAxisName;
+summary.periodAxis = periodAxisName;
+summary.scanAxis = scanAxisName;
+summary.channelRows = channelRows;
+summary.channelCols = channelCols;
+summary.channelCount = channelCount;
+summary.channelRowAxis = rowAxisName;
+summary.channelColAxis = colAxisName;
+summary.customChannelStartCount = customChannelStartCount;
+summary.segmentIndex = segmentIndex;
+end
+
+function depthOffsets = localSegmentedGratingDepthOffsets(depthOffsets, depthAxis)
+depthOffsets = reshape(depthOffsets, 1, []);
+if depthAxis == 3
+    depthOffsets = sort(depthOffsets, 'ascend');
+end
+end
+
+function channelRowOrder = localSegmentedGratingChannelRowOrder(channelRows, originUm, rowAxis, channelRowPitchUm, depthAxis)
+channelRowOrder = 1:channelRows;
+if depthAxis ~= 3 || rowAxis ~= 3 || channelRows < 2
+    return;
+end
+
+rowDepthUm = originUm(rowAxis) + (channelRowOrder - 1) * channelRowPitchUm;
+[~, order] = sort(rowDepthUm, 'ascend');
+channelRowOrder = channelRowOrder(order);
+end
+
+function [segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, customCount] = ...
+    localSegmentedGratingChannelStarts(lattice, channelRows, channelCols, period1Um, nPeriods1, segmentGapUm)
+defaultSegmentOneStartUm = localFiniteScalar(localFieldOrDefault(lattice, 'segment1StartUm', 0), 'Segment 1 start');
+if isfield(lattice, 'segment2StartUm') && ~isempty(lattice.segment2StartUm)
+    defaultSegmentTwoStartUm = localFiniteScalar(lattice.segment2StartUm, 'Segment 2 start');
+else
+    defaultSegmentTwoStartUm = defaultSegmentOneStartUm + (nPeriods1 - 1) * period1Um + segmentGapUm;
+end
+
+explicitStarts = logical(localFieldOrDefault(lattice, 'channelStartsExplicit', false));
+if explicitStarts
+    segmentOneStartUm = nan(channelRows, channelCols);
+    segmentTwoStartUm = nan(channelRows, channelCols);
+    segmentOneEnabled = false(channelRows, channelCols);
+    segmentTwoEnabled = false(channelRows, channelCols);
+else
+    segmentOneStartUm = repmat(defaultSegmentOneStartUm, channelRows, channelCols);
+    segmentTwoStartUm = repmat(defaultSegmentTwoStartUm, channelRows, channelCols);
+    segmentOneEnabled = true(channelRows, channelCols);
+    segmentTwoEnabled = true(channelRows, channelCols);
+end
+customCount = 0;
+
+if isfield(lattice, 'channelStartsUm') && ~isempty(lattice.channelStartsUm)
+    rows = localSegmentedGratingChannelStartRows(lattice.channelStartsUm, 'channelStartsUm', explicitStarts);
+    [segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, customCount] = ...
+        localApplySegmentedGratingChannelStartRows( ...
+        segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, ...
+        rows, channelRows, channelCols, period1Um, nPeriods1, segmentGapUm, ...
+        customCount, 'channelStartsUm', explicitStarts);
+end
+
+if isfield(lattice, 'channelStartsText') && any(strlength(strtrim(string(lattice.channelStartsText))) > 0)
+    rows = localParseSegmentedGratingChannelStartsText(lattice.channelStartsText);
+    [segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, customCount] = ...
+        localApplySegmentedGratingChannelStartRows( ...
+        segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, ...
+        rows, channelRows, channelCols, period1Um, nPeriods1, segmentGapUm, ...
+        customCount, 'Channel starts', false);
+end
+end
+
+function rows = localSegmentedGratingChannelStartRows(value, sourceName, allowBlankSegments)
+if nargin < 3
+    allowBlankSegments = false;
+end
+
+if isempty(value)
+    rows = zeros(0, 4);
+    return;
+end
+
+if ~(isnumeric(value) && ismatrix(value) && size(value, 2) >= 3 && size(value, 2) <= 4)
+    error('%s must be an Nx3 or Nx4 numeric matrix: row, col, segment1Start[, segment2Start].', sourceName);
+end
+
+rows = double(value);
+if size(rows, 2) == 3
+    rows(:, 4) = nan;
+end
+
+if any(any(~isfinite(rows(:, 1:2))))
+    error('%s row and col values must be finite numbers.', sourceName);
+end
+if allowBlankSegments
+    invalidStarts = ~isfinite(rows(:, 3:4)) & ~isnan(rows(:, 3:4));
+    if any(invalidStarts(:))
+        error('%s segment starts must be finite numbers, or NaN to leave blank.', sourceName);
+    end
+else
+    if any(~isfinite(rows(:, 3)))
+        error('%s segment 1 start must be a finite number.', sourceName);
+    end
+    if any(~isfinite(rows(:, 4)) & ~isnan(rows(:, 4)))
+        error('%s segment 2 start must be a finite number, or NaN for automatic inference.', sourceName);
+    end
+end
+end
+
+function rows = localParseSegmentedGratingChannelStartsText(textValue)
+rows = zeros(0, 4);
+lines = string(textValue);
+if isempty(lines)
+    return;
+end
+if isscalar(lines)
+    lines = splitlines(lines);
+else
+    lines = lines(:);
+end
+
+for iLine = 1:numel(lines)
+    lineText = strtrim(lines(iLine));
+    if strlength(lineText) == 0 || startsWith(lineText, "#") || startsWith(lineText, "%")
+        continue;
+    end
+
+    lineChar = regexprep(char(lineText), '[#%].*$', '');
+    tokens = regexp(lineChar, '[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', 'match');
+    values = str2double(tokens);
+    if numel(values) < 3 || numel(values) > 4 || any(isnan(values))
+        error('Channel starts row %d must contain 3 or 4 numeric values: row,col,segment1Start[,segment2Start].', iLine);
+    end
+    if numel(values) == 3
+        values(4) = nan;
+    end
+
+    rows(end + 1, :) = values(1:4); %#ok<AGROW>
+end
+end
+
+function [segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, customCount] = ...
+    localApplySegmentedGratingChannelStartRows( ...
+    segmentOneStartUm, segmentTwoStartUm, segmentOneEnabled, segmentTwoEnabled, ...
+    rows, channelRows, channelCols, period1Um, nPeriods1, segmentGapUm, ...
+    customCount, sourceName, explicitStarts)
+if isempty(rows)
+    return;
+end
+
+for iRow = 1:size(rows, 1)
+    channelRow = localPositiveInteger(rows(iRow, 1), sprintf('%s row %d row', sourceName, iRow));
+    channelCol = localPositiveInteger(rows(iRow, 2), sprintf('%s row %d col', sourceName, iRow));
+    if channelRow > channelRows || channelCol > channelCols
+        error('%s row %d specifies a nonexistent channel (%d,%d); current matrix is %dx%d.', ...
+            sourceName, iRow, channelRow, channelCol, channelRows, channelCols);
+    end
+
+    if explicitStarts
+        segmentOneEnabled(channelRow, channelCol) = isfinite(rows(iRow, 3));
+        segmentTwoEnabled(channelRow, channelCol) = isfinite(rows(iRow, 4));
+        segmentOneStartUm(channelRow, channelCol) = rows(iRow, 3);
+        segmentTwoStartUm(channelRow, channelCol) = rows(iRow, 4);
+    else
+        segmentOneStart = localFiniteScalar(rows(iRow, 3), sprintf('%s row %d segment 1 start', sourceName, iRow));
+        segmentOneStartUm(channelRow, channelCol) = segmentOneStart;
+        segmentOneEnabled(channelRow, channelCol) = true;
+        segmentTwoEnabled(channelRow, channelCol) = true;
+        if isfinite(rows(iRow, 4))
+            segmentTwoStartUm(channelRow, channelCol) = localFiniteScalar( ...
+                rows(iRow, 4), sprintf('%s row %d segment 2 start', sourceName, iRow));
+        else
+            segmentTwoStartUm(channelRow, channelCol) = segmentOneStart + (nPeriods1 - 1) * period1Um + segmentGapUm;
+        end
+    end
+    customCount = customCount + 1;
+end
+end
+
+function [data, prefix, summary] = localGenerateZPushFull(lattice, power)
+originUm = localVector3(localRequireField(lattice, 'originUm'), 'Initial position');
+moveXYUm = localVector2(localFieldOrDefault(lattice, 'moveXYUm', [0, 0]), 'XY move');
+pushCount = localPositiveInteger(localRequireField(lattice, 'pushCount'), 'Push count');
+pushStepUm = localPositiveScalar(localRequireField(lattice, 'pushStepUm'), 'Push step');
+intervalSeconds = localNonnegativeScalar(localFieldOrDefault(lattice, 'intervalSeconds', 0), 'Push interval');
+
+xUm = repmat(originUm(1) + moveXYUm(1), pushCount, 1);
+yUm = repmat(originUm(2) + moveXYUm(2), pushCount, 1);
+zUm = originUm(3) - (1:pushCount).' * pushStepUm;
+
+powerMode = localPowerMode(power);
+powerValues = localEvaluatePower(power, powerMode, xUm, yUm, zUm);
+pauseSeconds = repmat(intervalSeconds, pushCount, 1);
+
+xMm = xUm / 1000;
+yMm = yUm / 1000;
+zMm = zUm / 1000;
+data = [xMm, yMm, zMm, powerValues, pauseSeconds];
+
+finalDepthUm = pushCount * pushStepUm;
+prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, power);
+
+summary = struct();
+summary.pointCount = pushCount;
+summary.sourcePointCount = pushCount;
+summary.xRangeMm = [min(xMm), max(xMm)];
+summary.yRangeMm = [min(yMm), max(yMm)];
+summary.zRangeMm = [min(zMm), max(zMm)];
+summary.powerRange = [min(powerValues), max(powerValues)];
+summary.latticeType = 'z_push';
+summary.latticeLabel = 'Z Push';
+summary.pitchLabel = sprintf('XY target: X0 + %s um, Y0 + %s um; Z step -%s um, final -%s um; interval %s s', ...
+    localCompactNumber(moveXYUm(1)), localCompactNumber(moveXYUm(2)), ...
+    localCompactNumber(pushStepUm), localCompactNumber(finalDepthUm), localCompactNumber(intervalSeconds));
+summary.rowSpacingUm = pushStepUm;
+summary.regionMode = 'z_push';
+summary.regionLabel = 'Single-point push';
+summary.pathMode = 'z_push';
+summary.pathModeLabel = 'fixed XY, step toward -Z (deeper)';
+summary.powerMode = char(powerMode);
+summary.powerModeLabel = localPowerModeLabel(powerMode);
+summary.layerTraversalLabel = sprintf('from Z0 - %s um to Z0 - %s um (%d pushes deeper)', ...
+    localCompactNumber(pushStepUm), localCompactNumber(finalDepthUm), pushCount);
+summary.prefix = prefix;
+end
+
+function [data, prefix, summary] = localGenerateHexagonCutFull(lattice)
+centerUm = localVector3(localRequireField(lattice, 'centerUm'), 'Cut center');
+sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
+rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
+direction = localNormalizeOption(localFieldOrDefault(lattice, 'direction', 'counter_clockwise'));
+if ~any(direction == ["counter_clockwise", "clockwise"])
+    error('Hexagon cut direction must be Counter-clockwise or Clockwise.');
+end
+
+powerPercent = localNonnegativeScalar(localRequireField(lattice, 'powerPercent'), 'Cut power');
+cutSpeedMmPerSecond = localPositiveScalar(localRequireField(lattice, 'cutSpeedMmPerSecond'), 'Cut speed');
+accelerationMmPerSecondSquared = localPositiveScalar( ...
+    localRequireField(lattice, 'accelerationMmPerSecondSquared'), 'Acceleration');
+leadSafetyFactor = localPositiveScalar(localFieldOrDefault(lattice, 'leadSafetyFactor', 1.5), 'Lead safety factor');
+exitSafetyFactor = localNonnegativeScalar(localFieldOrDefault(lattice, 'exitSafetyFactor', 1), 'Exit safety factor');
+
+baseLeadUm = (cutSpeedMmPerSecond ^ 2 / (2 * accelerationMmPerSecondSquared)) * 1000;
+leadInUm = baseLeadUm * leadSafetyFactor;
+leadOutUm = baseLeadUm * exitSafetyFactor;
+
+angleStep = 60;
+if direction == "clockwise"
+    angleStep = -60;
+end
+anglesDeg = rotationDeg + (0:5).' * angleStep;
+verticesUm = [ ...
+    centerUm(1) + sideLengthUm * cosd(anglesDeg), ...
+    centerUm(2) + sideLengthUm * sind(anglesDeg), ...
+    repmat(centerUm(3), 6, 1)];
+
+cutStartUm = verticesUm;
+cutEndUm = verticesUm([2:6, 1], :);
+edgeVectorsUm = cutEndUm - cutStartUm;
+edgeLengthsUm = sqrt(sum(edgeVectorsUm .^ 2, 2));
+unitVectors = edgeVectorsUm ./ edgeLengthsUm;
+leadStartUm = cutStartUm - unitVectors * leadInUm;
+exitEndUm = cutEndUm + unitVectors * leadOutUm;
+
+cutStartMm = cutStartUm / 1000;
+cutEndMm = cutEndUm / 1000;
+leadStartMm = leadStartUm / 1000;
+exitEndMm = exitEndUm / 1000;
+powerValues = repmat(powerPercent, 6, 1);
+speedValues = repmat(cutSpeedMmPerSecond, 6, 1);
+leadSpeedValues = speedValues;
+pauseSeconds = zeros(6, 1);
+
+data = [cutStartMm, powerValues, cutEndMm, leadStartMm, exitEndMm, speedValues, leadSpeedValues, pauseSeconds];
+
+allX = [leadStartMm(:, 1); cutStartMm(:, 1); cutEndMm(:, 1); exitEndMm(:, 1)];
+allY = [leadStartMm(:, 2); cutStartMm(:, 2); cutEndMm(:, 2); exitEndMm(:, 2)];
+allZ = [leadStartMm(:, 3); cutStartMm(:, 3); cutEndMm(:, 3); exitEndMm(:, 3)];
+
+prefix = sprintf('hexcut_side_%s_rot_%s_speed_%s_P_%s_leadin_%s', ...
+    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    localCompactNumber(cutSpeedMmPerSecond), localCompactNumber(powerPercent), ...
+    localCompactNumber(leadInUm));
+
+summary = struct();
+summary.pointCount = 6;
+summary.sourcePointCount = 6;
+summary.xRangeMm = [min(allX), max(allX)];
+summary.yRangeMm = [min(allY), max(allY)];
+summary.zRangeMm = [min(allZ), max(allZ)];
+summary.powerRange = [powerPercent, powerPercent];
+summary.latticeType = 'hexagon_cut';
+summary.latticeLabel = 'Hexagon Cut';
+summary.pitchLabel = sprintf(['side %s um, rotation %s deg, %s; cut speed %s mm/s; ', ...
+    'lead-in %s um, lead-out %s um from acceleration %s mm/s^2'], ...
+    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    localHexagonCutDirectionLabel(direction), localCompactNumber(cutSpeedMmPerSecond), ...
+    localCompactNumber(leadInUm), localCompactNumber(leadOutUm), ...
+    localCompactNumber(accelerationMmPerSecondSquared));
+summary.rowSpacingUm = sideLengthUm;
+summary.regionMode = 'hexagon_cut';
+summary.regionLabel = 'Six exposed edges with laser-off lead-in and lead-out';
+summary.pathMode = 'hexagon_cut';
+summary.pathModeLabel = 'edge-by-edge, laser off for lead-in/out and on for each edge';
+summary.powerMode = 'fixed_value';
+summary.powerModeLabel = sprintf('Fixed Value (%s)', localCompactNumber(powerPercent));
+summary.layerTraversalLabel = sprintf('Six %s edges in the XY plane at Z = %s um', ...
+    localHexagonCutDirectionLabel(direction), localCompactNumber(centerUm(3)));
+summary.prefix = prefix;
+summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
+summary.accelerationMmPerSecondSquared = accelerationMmPerSecondSquared;
+summary.leadInUm = leadInUm;
+summary.leadOutUm = leadOutUm;
+end
+
 function [xUm, yUm, zUm, layerIndex, rowIndex, info] = localGenerateLatticeUm(lattice)
 latticeType = localLatticeType(lattice);
 counts = localCounts(lattice);
@@ -183,7 +677,7 @@ switch latticeType
         info = struct();
         info.type = 'cartesian';
         info.label = 'Cartesian';
-        info.pitchLabel = sprintf('Pitch X/Y/Z: %s / %s / %s um', ...
+        info.pitchLabel = sprintf('X/Y/Z pitch: %s / %s / %s um', ...
             localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), localCompactNumber(pitchZUm));
         info.rowSpacingUm = pitchYUm;
         info.counts = counts;
@@ -211,7 +705,7 @@ switch latticeType
         info = struct();
         info.type = char(latticeType);
         info.label = localLatticeLabel(latticeType);
-        info.pitchLabel = sprintf('Pitch XY/Z: %s / %s um', ...
+        info.pitchLabel = sprintf('XY/Z pitch: %s / %s um', ...
             localCompactNumber(pitchXYUm), localCompactNumber(pitchZUm));
         info.rowSpacingUm = rowSpacingUm;
         info.counts = counts;
@@ -221,7 +715,7 @@ switch latticeType
         info.hcpShiftDyUm = shiftDyUm;
 
     otherwise
-        error('Unsupported lattice type "%s".', latticeType);
+        error('Unsupported lattice type: "%s".', latticeType);
 end
 end
 
@@ -313,7 +807,7 @@ switch regionMode
             case "box"
                 sizeUm = localVector3(localRequireField(region, 'sizeUm'), 'Box size');
                 if any(sizeUm <= 0)
-                    error('Box size values must all be greater than zero.');
+                    error('Box dimensions must all be greater than 0.');
                 end
 
                 mask = abs(xUm - centerUm(1)) <= sizeUm(1) / 2 & ...
@@ -344,7 +838,7 @@ switch regionMode
                     abs(zUm - centerUm(3)) <= heightUm / 2;
 
             otherwise
-                error('Unsupported primitive type "%s".', primitiveType);
+                error('Unsupported geometry type: "%s".', primitiveType);
         end
 
     case "custom_formula"
@@ -352,7 +846,7 @@ switch regionMode
         mask = localEvaluateRegionFormula(formulaText, xUm, yUm, zUm);
 
     otherwise
-        error('Unsupported region mode "%s".', regionMode);
+        error('Unsupported region mode: "%s".', regionMode);
 end
 end
 
@@ -369,14 +863,25 @@ switch pathMode
         descendingRows = mod(rowIndex, 2) == 0;
         sortX(descendingRows) = -sortX(descendingRows);
     otherwise
-        error('Unsupported path mode "%s".', pathMode);
+        error('Unsupported path mode: "%s".', pathMode);
 end
 
-sortKeys = [layerIndex(:), rowIndex(:), sortX(:)];
-[~, order] = sortrows(sortKeys, [1, 2, 3]);
+sortKeys = [zUm(:), layerIndex(:), rowIndex(:), sortX(:)];
+[~, order] = sortrows(sortKeys, [1, 2, 3, 4]);
 xUm = xUm(order);
 yUm = yUm(order);
 zUm = zUm(order);
+end
+
+function data = localSortRowsByZAscending(data)
+if isempty(data) || size(data, 1) < 2 || size(data, 2) < 3
+    return;
+end
+
+rowIndex = (1:size(data, 1)).';
+sortKeys = [data(:, 3), rowIndex];
+[~, order] = sortrows(sortKeys, [1, 2]);
+data = data(order, :);
 end
 
 function power = localEvaluatePower(powerConfig, powerMode, xUm, yUm, zUm)
@@ -399,19 +904,19 @@ switch powerMode
         end
 
         zMm = zUm / 1000;
-        depthUm = 1070 - (zMm + 0.1) * 1000;
+        depthUm = (0.1 - zMm) * 1000;
         power = depth2powerMgF2(depthUm);
-        power = localValidatePowerVector(power, numel(zUm), 'depth model');
+        power = localValidatePowerVector(power, numel(zUm), 'Depth Model');
 
     otherwise
-        error('Unsupported power mode "%s".', powerMode);
+        error('Unsupported power mode: "%s".', powerMode);
 end
 end
 
 function power = localEvaluateCustomPowerFormula(formulaText, xUm, yUm, zUm)
 formulaText = strtrim(string(formulaText));
 if strlength(formulaText) == 0
-    error('Enter a custom formula for the selected power mode.');
+    error('Enter a custom formula for the current power mode.');
 end
 
 x = xUm; %#ok<NASGU>
@@ -421,16 +926,16 @@ z = zUm; %#ok<NASGU>
 try
     power = eval(formulaText);
 catch err
-    error('Failed to evaluate custom formula: %s', err.message);
+    error('Custom formula evaluation failed: %s', err.message);
 end
 
-power = localValidatePowerVector(power, numel(zUm), 'custom formula');
+power = localValidatePowerVector(power, numel(zUm), 'Custom Formula');
 end
 
 function mask = localEvaluateRegionFormula(formulaText, xUm, yUm, zUm)
 formulaText = strtrim(string(formulaText));
 if strlength(formulaText) == 0
-    error('Enter a custom region formula for the selected mode.');
+    error('Enter a custom region formula for the current mode.');
 end
 
 x = xUm; %#ok<NASGU>
@@ -440,7 +945,7 @@ z = zUm; %#ok<NASGU>
 try
     mask = eval(formulaText);
 catch err
-    error('Failed to evaluate custom region formula: %s', err.message);
+    error('Custom region formula evaluation failed: %s', err.message);
 end
 
 mask = localValidateMaskVector(mask, numel(zUm));
@@ -466,7 +971,7 @@ for i = 1:numel(lines)
     parts = regexp(char(lineText), '[,\s;]+', 'split');
     parts = parts(~cellfun('isempty', parts));
     if numel(parts) ~= 2
-        error('Each linear-points row must contain exactly two numbers: z_um and power.');
+        error('Each linear-points row must contain two numbers: z_um and power.');
     end
 
     zValue = str2double(parts{1});
@@ -480,14 +985,14 @@ for i = 1:numel(lines)
 end
 
 if numel(zPoints) < 2
-    error('Enter at least two z-power pairs for linear interpolation.');
+    error('Enter at least two z-power points for linear interpolation.');
 end
 
 [zPoints, sortIdx] = sort(zPoints);
 powerPoints = powerPoints(sortIdx);
 
 if any(diff(zPoints) == 0)
-    error('Z values for linear interpolation must be unique.');
+    error('Z values for linear interpolation cannot repeat.');
 end
 end
 
@@ -544,7 +1049,7 @@ end
 
 function lattice = localRequireStruct(params, fieldName)
 if ~isfield(params, fieldName) || ~isstruct(params.(fieldName))
-    error('Missing required struct field "%s".', fieldName);
+    error('Missing required struct field: "%s".', fieldName);
 end
 
 lattice = params.(fieldName);
@@ -552,7 +1057,7 @@ end
 
 function value = localRequireField(structValue, fieldName)
 if ~isfield(structValue, fieldName)
-    error('Missing required field "%s".', fieldName);
+    error('Missing required field: "%s".', fieldName);
 end
 
 value = structValue.(fieldName);
@@ -569,7 +1074,7 @@ end
 function counts = localCounts(lattice)
 counts = localRequireField(lattice, 'counts');
 if ~(isnumeric(counts) && numel(counts) == 3)
-    error('Lattice counts must contain exactly three numeric values.');
+    error('Lattice counts must contain exactly three values.');
 end
 
 counts = reshape(counts, 1, []);
@@ -580,17 +1085,49 @@ end
 
 function vector = localVector3(value, label)
 if ~(isnumeric(value) && numel(value) == 3 && all(isfinite(value(:))))
-    error('%s must contain exactly three finite numeric values.', label);
+    error('%s must contain exactly three finite values.', label);
 end
 
 vector = reshape(double(value), 1, []);
+end
+
+function vector = localVector2(value, label)
+if ~(isnumeric(value) && numel(value) == 2 && all(isfinite(value(:))))
+    error('%s must contain exactly two finite values.', label);
+end
+
+vector = reshape(double(value), 1, []);
+end
+
+function axisIndex = localAxisIndex(value, label)
+axisName = upper(strtrim(string(value)));
+switch axisName
+    case "X"
+        axisIndex = 1;
+    case "Y"
+        axisIndex = 2;
+    case "Z"
+        axisIndex = 3;
+    otherwise
+        error('%s must be X, Y, or Z.', label);
+end
+end
+
+function axisName = localAxisName(axisIndex)
+axisNames = ["X", "Y", "Z"];
+axisIndex = round(axisIndex);
+if axisIndex < 1 || axisIndex > numel(axisNames)
+    error('Axis index must be 1, 2, or 3.');
+end
+
+axisName = char(axisNames(axisIndex));
 end
 
 function latticeType = localLatticeType(lattice)
 latticeType = localNormalizeOption(localRequireField(lattice, 'type'));
 allowed = ["cartesian", "hex", "hcp"];
 if ~any(latticeType == allowed)
-    error('Unsupported lattice type "%s".', latticeType);
+    error('Unsupported lattice type: "%s".', latticeType);
 end
 end
 
@@ -598,7 +1135,7 @@ function regionMode = localRegionMode(region)
 regionMode = localNormalizeOption(localRequireField(region, 'mode'));
 allowed = ["full_block", "primitive", "custom_formula"];
 if ~any(regionMode == allowed)
-    error('Unsupported region mode "%s".', regionMode);
+    error('Unsupported region mode: "%s".', regionMode);
 end
 end
 
@@ -606,7 +1143,7 @@ function primitiveType = localPrimitiveType(region)
 primitiveType = localNormalizeOption(localFieldOrDefault(region, 'primitiveType', 'box'));
 allowed = ["box", "cylinder", "sphere", "tube"];
 if ~any(primitiveType == allowed)
-    error('Unsupported primitive type "%s".', primitiveType);
+    error('Unsupported geometry type: "%s".', primitiveType);
 end
 end
 
@@ -614,7 +1151,7 @@ function powerMode = localPowerMode(power)
 powerMode = localNormalizeOption(localFieldOrDefault(power, 'mode', 'fixed_value'));
 allowed = ["fixed_value", "custom_formula", "linear_points", "depth_model"];
 if ~any(powerMode == allowed)
-    error('Unsupported power mode "%s".', powerMode);
+    error('Unsupported power mode: "%s".', powerMode);
 end
 end
 
@@ -622,7 +1159,7 @@ function pathMode = localPathMode(ordering)
 pathMode = localNormalizeOption(localFieldOrDefault(ordering, 'pathMode', 'serpentine'));
 allowed = ["row_major", "serpentine"];
 if ~any(pathMode == allowed)
-    error('Unsupported path mode "%s".', pathMode);
+    error('Unsupported path mode: "%s".', pathMode);
 end
 end
 
@@ -637,14 +1174,14 @@ end
 function value = localPositiveScalar(value, label)
 value = localFiniteScalar(value, label);
 if value <= 0
-    error('%s must be greater than zero.', label);
+    error('%s must be greater than 0.', label);
 end
 end
 
 function value = localNonnegativeScalar(value, label)
 value = localFiniteScalar(value, label);
 if value < 0
-    error('%s must be greater than or equal to zero.', label);
+    error('%s must be greater than or equal to 0.', label);
 end
 end
 
@@ -662,11 +1199,11 @@ else
 end
 
 if numel(power) ~= expectedCount
-    error('The %s output must be a scalar or have one value per point.', sourceName);
+    error('%s output must be scalar, or provide one value per point.', sourceName);
 end
 
 if any(~isfinite(power))
-    error('The %s output contains non-finite values.', sourceName);
+    error('%s output contains non-finite values.', sourceName);
 end
 end
 
@@ -678,11 +1215,11 @@ else
 end
 
 if numel(mask) ~= expectedCount
-    error('The custom region formula must return a scalar or one value per point.');
+    error('Custom region formula must return a scalar, or one value per point.');
 end
 
 if any(~isfinite(mask))
-    error('The custom region formula output contains non-finite values.');
+    error('Custom region formula output contains non-finite values.');
 end
 
 mask = logical(mask);
@@ -706,7 +1243,7 @@ switch regionMode
     case "full_block"
         label = 'Full Block';
     case "primitive"
-        label = ['Primitive (', localPrimitiveLabel(primitiveType), ')'];
+        label = ['Geometry (', localPrimitiveLabel(primitiveType), ')'];
     case "custom_formula"
         label = 'Custom Formula';
     otherwise
@@ -743,13 +1280,13 @@ end
 function label = localPowerModeLabel(powerMode)
 switch powerMode
     case "fixed_value"
-        label = 'Fixed value';
+        label = 'Fixed Value';
     case "custom_formula"
-        label = 'Custom formula';
+        label = 'Custom Formula';
     case "linear_points"
-        label = 'Linear points';
+        label = 'Linear Points';
     case "depth_model"
-        label = 'Depth model';
+        label = 'Depth Model';
     otherwise
         label = char(powerMode);
 end
@@ -757,18 +1294,36 @@ end
 
 function label = localStaircasePowerModeLabel(nPowers, powerStart, powerEnd)
 if nPowers == 1
-    label = sprintf('Single column (1 level at %s %%)', localCompactNumber(powerStart));
+    label = sprintf('Single column (1 level, %s)', localCompactNumber(powerStart));
 else
-    label = sprintf('Per column (%d levels, %s to %s %%)', ...
+    label = sprintf('Column-varying (%d levels, %s to %s)', ...
         nPowers, localCompactNumber(powerStart), localCompactNumber(powerEnd));
 end
 end
 
 function label = localStaircaseTraversalLabel(zStepUm)
-if zStepUm > 0
-    label = 'Deep to shallow (Z ascending)';
+if zStepUm ~= 0
+    label = 'Deep to shallow (ascending Z; smaller Z is deeper)';
 else
-    label = 'Shallow to deep (Z descending)';
+    label = 'Z Step is 0';
+end
+end
+
+function label = localSegmentedGratingTraversalLabel(depthStepUm, depthAxisName)
+if strcmpi(depthAxisName, 'Z')
+    label = 'Deep to shallow (ascending Z; smaller Z is deeper)';
+elseif depthStepUm > 0
+    label = sprintf('Increasing along %s', depthAxisName);
+else
+    label = sprintf('Decreasing along %s', depthAxisName);
+end
+end
+
+function label = localHexagonCutDirectionLabel(direction)
+if string(direction) == "clockwise"
+    label = 'clockwise';
+else
+    label = 'counter-clockwise';
 end
 end
 
@@ -793,6 +1348,47 @@ if nPowers == 1
 else
     powerTag = ['P_', localCompactNumber(powerStart), '_to_', localCompactNumber(powerEnd)];
 end
+end
+
+function prefix = localBuildSegmentedGratingPrefix( ...
+    depthAxisName, periodAxisName, scanAxisName, nDepths, depthStartUm, depthStepUm, ...
+    period1Um, nPeriods1, period2Um, nPeriods2, segmentGapUm, ...
+    slabCopies1, slabPitch1Um, slabCopies2, slabPitch2Um, ...
+    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, powerConfig)
+powerTag = '';
+if powerMode == "fixed_value"
+    fixedValue = localFieldOrDefault(powerConfig, 'fixedValue', 10);
+    powerTag = ['_Pfixed_', localCompactNumber(fixedValue)];
+end
+
+prefix = sprintf([ ...
+    'seggrating_d%s_p%s_s%s_nd_%d_dstart_%s_dd_%s_', ...
+    'seg1_%dx%s_slab_%d_pitch_%s_gap_%s_seg2_%dx%s_slab_%d_pitch_%s_', ...
+    'ch_%dx%d_rp_%s_cp_%s_ox_%s_oy_%s_oz_%s%s'], ...
+    lower(depthAxisName), lower(periodAxisName), lower(scanAxisName), ...
+    nDepths, localCompactNumber(depthStartUm), localCompactNumber(depthStepUm), ...
+    nPeriods1, localCompactNumber(period1Um), ...
+    slabCopies1, localCompactNumber(slabPitch1Um), ...
+    localCompactNumber(segmentGapUm), ...
+    nPeriods2, localCompactNumber(period2Um), ...
+    slabCopies2, localCompactNumber(slabPitch2Um), ...
+    channelRows, channelCols, ...
+    localCompactNumber(channelRowPitchUm), localCompactNumber(channelColPitchUm), ...
+    localCompactNumber(originUm(1)), localCompactNumber(originUm(2)), localCompactNumber(originUm(3)), ...
+    powerTag);
+end
+
+function prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, powerConfig)
+powerTag = '';
+if powerMode == "fixed_value"
+    fixedValue = localFieldOrDefault(powerConfig, 'fixedValue', 10);
+    powerTag = ['_Pfixed_', localCompactNumber(fixedValue)];
+end
+
+prefix = sprintf('zpush_n_%d_dz_%s_wait_%s_ox_%s_oy_%s_oz_%s_dx_%s_dy_%s%s', ...
+    pushCount, localCompactNumber(pushStepUm), localCompactNumber(intervalSeconds), ...
+    localCompactNumber(originUm(1)), localCompactNumber(originUm(2)), localCompactNumber(originUm(3)), ...
+    localCompactNumber(moveXYUm(1)), localCompactNumber(moveXYUm(2)), powerTag);
 end
 
 function textValue = localCompactNumber(value)
