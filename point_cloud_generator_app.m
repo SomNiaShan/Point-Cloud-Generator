@@ -50,8 +50,8 @@ latticeTab = uitab(controlTabs, 'Title', 'Lattice');
 latticeTab.Scrollable = 'on';
 powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
 
-latticeTabGrid = uigridlayout(latticeTab, [28, 1]);
-latticeTabGrid.RowHeight = repmat({'fit'}, 1, 28);
+latticeTabGrid = uigridlayout(latticeTab, [32, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 32);
 latticeTabGrid.ColumnWidth = {'1x'};
 latticeTabGrid.Padding = [6, 6, 6, 6];
 latticeTabGrid.RowSpacing = 4;
@@ -68,8 +68,8 @@ ui = struct();
 latticeGrid = latticeTabGrid;
 
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut'}, 'Segmented Grating', @onLatticeTypeChanged, ...
-    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut'}, tips.latticeType);
+    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut'}, 'Segmented Grating', @onLatticeTypeChanged, ...
+    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut'}, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
@@ -300,6 +300,35 @@ ui.HexCutAccelerationField = hexCutMotionFields(3);
 ui.HexCutLeadSafetyField = hexCutMotionFields(4);
 ui.HexCutExitSafetyField = hexCutMotionFields(5);
 
+[ui.HexReleasePatternPanel, hexReleasePatternFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Release Pattern', {'Wall Margin', 'Rings', 'Ring Pitch', 'Hatch Pitch'}, ...
+    [15, 3, 10, 80], 4, tips.hexReleasePattern);
+ui.HexReleasePatternPanel.Layout.Row = 29;
+ui.HexReleaseWallMarginField = hexReleasePatternFields(1);
+ui.HexReleaseRingCountField = hexReleasePatternFields(2);
+ui.HexReleaseRingPitchField = hexReleasePatternFields(3);
+ui.HexReleaseHatchPitchField = hexReleasePatternFields(4);
+
+[ui.HexReleaseZPanel, hexReleaseZFields] = createValuePanel( ...
+    latticeGrid, 'Release Z Stack', {'Layers', 'Z Step'}, [1, 0], tips.hexReleaseZ);
+ui.HexReleaseZPanel.Layout.Row = 30;
+ui.HexReleaseLayerCountField = hexReleaseZFields(1);
+ui.HexReleaseZStepField = hexReleaseZFields(2);
+
+[ui.HexReleaseMotionPanel, hexReleaseMotionFields] = createValuePanelWithSlots( ...
+    latticeGrid, 'Release Motion', {'Ring P (%)', 'Ring Speed', 'Hatch P (%)', 'Hatch Speed'}, ...
+    [10, 0.01, 10, 0.01], 4, tips.hexReleaseMotion);
+ui.HexReleaseMotionPanel.Layout.Row = 31;
+ui.HexReleaseRingPowerField = hexReleaseMotionFields(1);
+ui.HexReleaseRingSpeedField = hexReleaseMotionFields(2);
+ui.HexReleaseHatchPowerField = hexReleaseMotionFields(3);
+ui.HexReleaseHatchSpeedField = hexReleaseMotionFields(4);
+
+[ui.HexReleaseOrderRow, ui.HexReleaseOrderDropDown] = createDropdownRow( ...
+    latticeGrid, 'Release Order', {'Inside-out', 'Outside-in'}, 'Inside-out', @onStaircaseParamChanged, ...
+    {'Inside-out', 'Outside-in'}, tips.hexReleaseOrder);
+ui.HexReleaseOrderRow.Layout.Row = 32;
+
 ui.PowerPanel = uipanel(powerOrderGrid, 'Title', 'Power');
 ui.PowerPanel.Layout.Row = 1;
 ui.PowerPanel.Layout.Column = 1;
@@ -516,7 +545,9 @@ applyCompactFonts(fig);
         isGrating = latticeType == "Segmented Grating";
         isZPush = latticeType == "Z Push";
         isHexCut = latticeType == "Hexagon Cut";
-        isFixedOrder = isStaircase || isGrating || isZPush || isHexCut;
+        isHexReleaseCut = latticeType == "Hexagon Release Cut";
+        isCutMode = isHexCut || isHexReleaseCut;
+        isFixedOrder = isStaircase || isGrating || isZPush || isCutMode;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
@@ -524,7 +555,7 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 2, ui.CountsPanel, 'fit', ~isFixedOrder);
         setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 'fit', showCartesian);
         setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 'fit', showHexPitch);
-        setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ~isStaircase && ~isZPush && ~isHexCut);
+        setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ~isStaircase && ~isZPush && ~isCutMode);
         setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 'fit', showHcpShift);
         setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 'fit', isStaircase);
         setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', isStaircase);
@@ -544,14 +575,18 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 22, ui.ZPushOriginPanel, 'fit', isZPush);
         setPanelRow(latticeGrid, 23, ui.ZPushMovePanel, 'fit', isZPush);
         setPanelRow(latticeGrid, 24, ui.ZPushConfigPanel, 'fit', isZPush);
-        setPanelRow(latticeGrid, 25, ui.HexCutCenterPanel, 'fit', isHexCut);
-        setPanelRow(latticeGrid, 26, ui.HexCutGeometryPanel, 'fit', isHexCut);
-        setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isHexCut);
-        setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isHexCut);
+        setPanelRow(latticeGrid, 25, ui.HexCutCenterPanel, 'fit', isCutMode);
+        setPanelRow(latticeGrid, 26, ui.HexCutGeometryPanel, 'fit', isCutMode);
+        setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isCutMode);
+        setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isCutMode);
+        setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isHexReleaseCut);
+        setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isHexReleaseCut);
+        setPanelRow(latticeGrid, 31, ui.HexReleaseMotionPanel, 'fit', isHexReleaseCut);
+        setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isHexReleaseCut);
 
-        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isHexCut);
+        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isCutMode);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
-        setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isHexCut);
+        setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isCutMode);
         if isGrating
             ui.ExposureModeDropDown.Value = 'Axis scan';
             syncGratingScanAxis();
@@ -559,7 +594,7 @@ applyCompactFonts(fig);
         elseif isZPush
             ui.ExposureModeDropDown.Value = 'Point dwell';
             onPlanParamChanged();
-        elseif isHexCut
+        elseif isCutMode
             onPlanParamChanged();
         end
         updateTraversalNote();
@@ -859,7 +894,7 @@ applyCompactFonts(fig);
             params.lattice.pushCount = round(max(1, ui.ZPushCountField.Value));
             params.lattice.pushStepUm = ui.ZPushStepField.Value;
             params.lattice.intervalSeconds = ui.ZPushIntervalField.Value;
-        elseif latticeType == "Hexagon Cut"
+        elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut"
             params.lattice.centerUm = [ ...
                 ui.HexCutCenterXField.Value, ...
                 ui.HexCutCenterYField.Value, ...
@@ -872,6 +907,19 @@ applyCompactFonts(fig);
             params.lattice.accelerationMmPerSecondSquared = ui.HexCutAccelerationField.Value;
             params.lattice.leadSafetyFactor = ui.HexCutLeadSafetyField.Value;
             params.lattice.exitSafetyFactor = ui.HexCutExitSafetyField.Value;
+            if latticeType == "Hexagon Release Cut"
+                params.lattice.releaseWallMarginUm = ui.HexReleaseWallMarginField.Value;
+                params.lattice.releaseRingCount = round(max(1, ui.HexReleaseRingCountField.Value));
+                params.lattice.releaseRingPitchUm = ui.HexReleaseRingPitchField.Value;
+                params.lattice.releaseHatchPitchUm = ui.HexReleaseHatchPitchField.Value;
+                params.lattice.releaseLayerCount = round(max(1, ui.HexReleaseLayerCountField.Value));
+                params.lattice.releaseZStepUm = ui.HexReleaseZStepField.Value;
+                params.lattice.releaseRingPowerPercent = ui.HexReleaseRingPowerField.Value;
+                params.lattice.releaseRingSpeedMmPerSecond = ui.HexReleaseRingSpeedField.Value;
+                params.lattice.releaseHatchPowerPercent = ui.HexReleaseHatchPowerField.Value;
+                params.lattice.releaseHatchSpeedMmPerSecond = ui.HexReleaseHatchSpeedField.Value;
+                params.lattice.releaseOrder = string(ui.HexReleaseOrderDropDown.Value);
+            end
         else
             params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
             params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
@@ -995,6 +1043,8 @@ applyCompactFonts(fig);
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
+        isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
+        isCutMode = isHexCut || isHexReleaseCut;
         planConfig = struct();
         planConfig.mode = normalizePlanOption(ui.ExposureModeDropDown.Value);
         planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
@@ -1015,7 +1065,7 @@ applyCompactFonts(fig);
             planConfig.scanAxis = inferredGratingScanAxis();
         elseif isZPush
             planConfig.mode = "point_dwell";
-        elseif isHexCut
+        elseif isCutMode
             planConfig.mode = "cut_scan";
             planConfig.preserveOrder = true;
         end
@@ -1121,23 +1171,53 @@ applyCompactFonts(fig);
             return;
         end
 
-        if latticeType == "Hexagon Cut"
+        if latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut"
             speed = ui.HexCutSpeedField.Value;
             acceleration = ui.HexCutAccelerationField.Value;
             leadSafety = ui.HexCutLeadSafetyField.Value;
             exitSafety = ui.HexCutExitSafetyField.Value;
-            if ~(isscalar(speed) && isnumeric(speed) && isfinite(speed) && speed > 0)
-                detailText = 'Hexagon Cut requires a finite positive cut speed.';
-            elseif ~(isscalar(acceleration) && isnumeric(acceleration) && isfinite(acceleration) && acceleration > 0)
-                detailText = 'Hexagon Cut requires a finite positive acceleration.';
-            elseif ~(isscalar(leadSafety) && isnumeric(leadSafety) && isfinite(leadSafety) && leadSafety > 0)
-                detailText = 'Hexagon Cut requires a finite positive lead safety factor.';
-            elseif ~(isscalar(exitSafety) && isnumeric(exitSafety) && isfinite(exitSafety) && exitSafety >= 0)
-                detailText = 'Hexagon Cut requires a finite nonnegative exit safety factor.';
+            isReleaseCut = latticeType == "Hexagon Release Cut";
+            if isReleaseCut
+                ringSpeed = ui.HexReleaseRingSpeedField.Value;
+                hatchSpeed = ui.HexReleaseHatchSpeedField.Value;
             else
-                baseLeadUm = (speed ^ 2 / (2 * acceleration)) * 1000;
-                detailText = sprintf('Each edge starts %.4g um before the cut start, exposes during the edge, then exits %.4g um after the cut end.', ...
-                    baseLeadUm * leadSafety, baseLeadUm * exitSafety);
+                ringSpeed = speed;
+                hatchSpeed = speed;
+            end
+            if ~(isscalar(speed) && isnumeric(speed) && isfinite(speed) && speed > 0)
+                detailText = 'Hexagon cut requires a finite positive cut speed.';
+            elseif isReleaseCut && ~(isscalar(ringSpeed) && isnumeric(ringSpeed) && isfinite(ringSpeed) && ringSpeed > 0)
+                detailText = 'Hexagon release cut requires a finite positive ring speed.';
+            elseif isReleaseCut && ~(isscalar(hatchSpeed) && isnumeric(hatchSpeed) && isfinite(hatchSpeed) && hatchSpeed > 0)
+                detailText = 'Hexagon release cut requires a finite positive hatch speed.';
+            elseif ~(isscalar(acceleration) && isnumeric(acceleration) && isfinite(acceleration) && acceleration > 0)
+                detailText = 'Hexagon cut requires a finite positive acceleration.';
+            elseif ~(isscalar(leadSafety) && isnumeric(leadSafety) && isfinite(leadSafety) && leadSafety > 0)
+                detailText = 'Hexagon cut requires a finite positive lead safety factor.';
+            elseif ~(isscalar(exitSafety) && isnumeric(exitSafety) && isfinite(exitSafety) && exitSafety >= 0)
+                detailText = 'Hexagon cut requires a finite nonnegative exit safety factor.';
+            else
+                if isReleaseCut
+                    ringCount = round(max(1, ui.HexReleaseRingCountField.Value));
+                    layerCount = round(max(1, ui.HexReleaseLayerCountField.Value));
+                    releaseOrder = string(ui.HexReleaseOrderDropDown.Value);
+                    speeds = [speed, ringSpeed, hatchSpeed];
+                    baseLeadUm = (speeds .^ 2 ./ (2 * acceleration)) * 1000;
+                    leadInUm = baseLeadUm * leadSafety;
+                    leadOutUm = baseLeadUm * exitSafety;
+                    if releaseOrder == "Outside-in"
+                        orderText = sprintf('starts with the final outer wall, then %d outline ring(s) inward, then internal 3-direction hatch lines', ringCount);
+                    else
+                        orderText = sprintf('starts with internal 3-direction hatch lines, then %d outline ring(s) from inside to the final outer wall', ringCount);
+                    end
+                    detailText = sprintf(['Each Z layer %s; %d layer(s) total. ', ...
+                        'Lead-in range %.4g-%.4g um, lead-out range %.4g-%.4g um.'], ...
+                        orderText, layerCount, min(leadInUm), max(leadInUm), min(leadOutUm), max(leadOutUm));
+                else
+                    baseLeadUm = (speed ^ 2 / (2 * acceleration)) * 1000;
+                    detailText = sprintf('Each edge starts %.4g um before the cut start, exposes during the edge, then exits %.4g um after the cut end.', ...
+                        baseLeadUm * leadSafety, baseLeadUm * exitSafety);
+                end
             end
             ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
             return;
@@ -1322,7 +1402,7 @@ modes = lower(strtrim(string(value)));
 modes = regexprep(modes, '[\s-]+', '_');
 modes(modes == "axis_scan") = "scan";
 modes(modes == "point_dwell") = "point";
-modes(modes == "cut_scan" | modes == "hexagon_cut") = "cut";
+modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut") = "cut";
 if any(~ismember(modes, ["point", "scan", "cut"]))
     error('The mode column only supports point, scan, or cut.');
 end
@@ -1447,7 +1527,7 @@ switch planConfig.mode
 
     case "cut_scan"
         if size(data, 2) < 14
-            error('Hexagon cut data must include cut end, lead-in, lead-out, and speed columns.');
+            error('Cut-scan data must include cut end, lead-in, lead-out, and speed columns.');
         end
         mode = repmat("cut", n, 1);
         x2 = data(:, 5);
@@ -1471,13 +1551,13 @@ switch planConfig.mode
             pauseSeconds = zeros(n, 1);
         end
         if any(~isfinite([x2; y2; z2; leadX; leadY; leadZ; exitX; exitY; exitZ]))
-            error('Hexagon cut coordinates must all be finite.');
+            error('Cut-scan coordinates must all be finite.');
         end
         if any(~isfinite(scanSpeed) | scanSpeed <= 0 | ~isfinite(leadSpeed) | leadSpeed <= 0)
-            error('Hexagon cut speeds must be finite positive values.');
+            error('Cut-scan speeds must be finite positive values.');
         end
         if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
-            error('Hexagon cut pause values must be finite nonnegative values.');
+            error('Cut-scan pause values must be finite nonnegative values.');
         end
 
     otherwise
@@ -1618,7 +1698,7 @@ end
 
 function tips = parameterTooltips()
 tips = struct();
-tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges with laser-off lead-in/out moves.';
+tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds internal hatch and concentric release rings.';
 tips.counts = { ...
     'Number of generated points along X; must be a positive integer.', ...
     'Number of generated points along Y; must be a positive integer.', ...
@@ -1708,11 +1788,26 @@ tips.hexCutGeometry = { ...
     'Rotation angle of the first vertex around the center, in degrees.'};
 tips.hexCutDirection = 'Order used to cut the six hexagon edges.';
 tips.hexCutMotion = { ...
-    'Laser power used during each exposed edge.', ...
-    'Target stage speed during the exposed cut, in mm/s.', ...
+    'Laser power used during each exposed edge; in Hexagon Release Cut this is the final outer wall power.', ...
+    'Target stage speed during the exposed cut, in mm/s; in Hexagon Release Cut this is the final outer wall speed.', ...
     'Stage acceleration used to estimate the laser-off lead-in distance, in mm/s^2.', ...
     'Multiplier applied to v^2/(2a) for the lead-in distance before each cut start.', ...
     'Multiplier applied to v^2/(2a) for the laser-off lead-out distance after each cut end.'};
+tips.hexReleasePattern = { ...
+    'Distance from internal hatch endpoints to the final hexagon wall, in um.', ...
+    'Number of concentric hexagon outline rings; the final ring is the requested hole boundary.', ...
+    'Inward offset spacing between concentric outline rings, in um.', ...
+    'Spacing between internal 3-direction hatch lines, in um; set to 0 to disable hatch.'};
+tips.hexReleaseZ = { ...
+    'Number of repeated release-cut Z layers.', ...
+    'Z offset between release layers, in um; sign controls whether layers move deeper or shallower.'};
+tips.hexReleaseMotion = { ...
+    'Laser power used for concentric release rings inside the final hexagon wall.', ...
+    'Stage speed used for concentric release rings, in mm/s.', ...
+    'Laser power used for internal 3-direction hatch destruction lines.', ...
+    'Stage speed used for internal 3-direction hatch destruction lines, in mm/s.'};
+tips.hexReleaseOrder = ['Inside-out writes hatch first, then inward release rings, and the final wall last; ', ...
+    'Outside-in writes the final wall first, then release rings inward, and hatch last.'];
 tips.powerMode = 'Choose how the power column is generated for each point: fixed value, formula, or linear interpolation by Z depth.';
 tips.fixedPower = 'Single power value used for all points in fixed-power mode.';
 tips.powerFormula = 'Custom power formula; x, y, and z variables are in um.';

@@ -26,6 +26,10 @@ if latticeTypeStr == "hexagon_cut"
     [data, prefix, summary] = localGenerateHexagonCutFull(lattice);
     return;
 end
+if latticeTypeStr == "hexagon_release_cut"
+    [data, prefix, summary] = localGenerateHexagonReleaseCutFull(lattice);
+    return;
+end
 
 region = localRequireStruct(params, 'region');
 power = localRequireStruct(params, 'power');
@@ -587,42 +591,16 @@ accelerationMmPerSecondSquared = localPositiveScalar( ...
 leadSafetyFactor = localPositiveScalar(localFieldOrDefault(lattice, 'leadSafetyFactor', 1.5), 'Lead safety factor');
 exitSafetyFactor = localNonnegativeScalar(localFieldOrDefault(lattice, 'exitSafetyFactor', 1), 'Exit safety factor');
 
-baseLeadUm = (cutSpeedMmPerSecond ^ 2 / (2 * accelerationMmPerSecondSquared)) * 1000;
-leadInUm = baseLeadUm * leadSafetyFactor;
-leadOutUm = baseLeadUm * exitSafetyFactor;
+[leadInUm, leadOutUm] = localCutLeadDistances( ...
+    cutSpeedMmPerSecond, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor);
 
-angleStep = 60;
-if direction == "clockwise"
-    angleStep = -60;
-end
-anglesDeg = rotationDeg + (0:5).' * angleStep;
-verticesUm = [ ...
-    centerUm(1) + sideLengthUm * cosd(anglesDeg), ...
-    centerUm(2) + sideLengthUm * sind(anglesDeg), ...
-    repmat(centerUm(3), 6, 1)];
+[cutStartUm, cutEndUm] = localHexagonEdgeSegments(centerUm, sideLengthUm, rotationDeg, direction);
+data = localBuildCutScanData(cutStartUm, cutEndUm, powerPercent, ...
+    cutSpeedMmPerSecond, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, 0);
 
-cutStartUm = verticesUm;
-cutEndUm = verticesUm([2:6, 1], :);
-edgeVectorsUm = cutEndUm - cutStartUm;
-edgeLengthsUm = sqrt(sum(edgeVectorsUm .^ 2, 2));
-unitVectors = edgeVectorsUm ./ edgeLengthsUm;
-leadStartUm = cutStartUm - unitVectors * leadInUm;
-exitEndUm = cutEndUm + unitVectors * leadOutUm;
-
-cutStartMm = cutStartUm / 1000;
-cutEndMm = cutEndUm / 1000;
-leadStartMm = leadStartUm / 1000;
-exitEndMm = exitEndUm / 1000;
-powerValues = repmat(powerPercent, 6, 1);
-speedValues = repmat(cutSpeedMmPerSecond, 6, 1);
-leadSpeedValues = speedValues;
-pauseSeconds = zeros(6, 1);
-
-data = [cutStartMm, powerValues, cutEndMm, leadStartMm, exitEndMm, speedValues, leadSpeedValues, pauseSeconds];
-
-allX = [leadStartMm(:, 1); cutStartMm(:, 1); cutEndMm(:, 1); exitEndMm(:, 1)];
-allY = [leadStartMm(:, 2); cutStartMm(:, 2); cutEndMm(:, 2); exitEndMm(:, 2)];
-allZ = [leadStartMm(:, 3); cutStartMm(:, 3); cutEndMm(:, 3); exitEndMm(:, 3)];
+allX = [data(:, 8); data(:, 1); data(:, 5); data(:, 11)];
+allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
+allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
 
 prefix = sprintf('hexcut_side_%s_rot_%s_speed_%s_P_%s_leadin_%s', ...
     localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
@@ -658,6 +636,372 @@ summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
 summary.accelerationMmPerSecondSquared = accelerationMmPerSecondSquared;
 summary.leadInUm = leadInUm;
 summary.leadOutUm = leadOutUm;
+end
+
+function [data, prefix, summary] = localGenerateHexagonReleaseCutFull(lattice)
+centerUm = localVector3(localRequireField(lattice, 'centerUm'), 'Cut center');
+sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
+rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
+direction = localNormalizeOption(localFieldOrDefault(lattice, 'direction', 'counter_clockwise'));
+if ~any(direction == ["counter_clockwise", "clockwise"])
+    error('Hexagon release cut direction must be Counter-clockwise or Clockwise.');
+end
+
+powerPercent = localNonnegativeScalar(localRequireField(lattice, 'powerPercent'), 'Cut power');
+cutSpeedMmPerSecond = localPositiveScalar(localRequireField(lattice, 'cutSpeedMmPerSecond'), 'Cut speed');
+accelerationMmPerSecondSquared = localPositiveScalar( ...
+    localRequireField(lattice, 'accelerationMmPerSecondSquared'), 'Acceleration');
+leadSafetyFactor = localPositiveScalar(localFieldOrDefault(lattice, 'leadSafetyFactor', 1.5), 'Lead safety factor');
+exitSafetyFactor = localNonnegativeScalar(localFieldOrDefault(lattice, 'exitSafetyFactor', 1), 'Exit safety factor');
+ringPowerPercent = localNonnegativeScalar( ...
+    localFieldOrDefault(lattice, 'releaseRingPowerPercent', powerPercent), 'Release ring power');
+ringSpeedMmPerSecond = localPositiveScalar( ...
+    localFieldOrDefault(lattice, 'releaseRingSpeedMmPerSecond', cutSpeedMmPerSecond), 'Release ring speed');
+hatchPowerPercent = localNonnegativeScalar( ...
+    localFieldOrDefault(lattice, 'releaseHatchPowerPercent', ringPowerPercent), 'Release hatch power');
+hatchSpeedMmPerSecond = localPositiveScalar( ...
+    localFieldOrDefault(lattice, 'releaseHatchSpeedMmPerSecond', ringSpeedMmPerSecond), 'Release hatch speed');
+
+wallMarginUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseWallMarginUm', 15), 'Release wall margin');
+ringCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseRingCount', 3), 'Release ring count');
+ringPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseRingPitchUm', 10), 'Release ring pitch');
+hatchPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseHatchPitchUm', 80), 'Release hatch pitch');
+layerCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseLayerCount', 1), 'Release layer count');
+zStepUm = localFiniteScalar(localFieldOrDefault(lattice, 'releaseZStepUm', 0), 'Release Z step');
+releaseOrder = localNormalizeOption(localFieldOrDefault(lattice, 'releaseOrder', 'inside_out'));
+if ~any(releaseOrder == ["inside_out", "outside_in"])
+    error('Release order must be Inside-out or Outside-in.');
+end
+
+apothemUm = sideLengthUm * cosd(30);
+if wallMarginUm >= apothemUm
+    error('Release wall margin must be smaller than the hexagon apothem %.4g um.', apothemUm);
+end
+if ringCount > 1 && ringPitchUm <= 0
+    error('Release ring pitch must be greater than 0 when ring count is greater than 1.');
+end
+
+maxRingOffsetUm = (ringCount - 1) * ringPitchUm;
+if maxRingOffsetUm >= apothemUm
+    error('Release rings extend past the hexagon center. Reduce ring count or ring pitch.');
+end
+if layerCount > 1 && zStepUm == 0
+    error('Release Z step must be non-zero when layer count is greater than 1.');
+end
+
+innerHatchSideUm = sideLengthUm - wallMarginUm / cosd(30);
+if hatchPitchUm > 0 && innerHatchSideUm <= 0
+    error('Release hatch region collapsed. Reduce the wall margin.');
+end
+
+allStartUm = zeros(0, 3);
+allEndUm = zeros(0, 3);
+allPowerValues = zeros(0, 1);
+allSpeedValues = zeros(0, 1);
+for iLayer = 1:layerCount
+    layerCenterUm = centerUm;
+    layerCenterUm(3) = centerUm(3) + (iLayer - 1) * zStepUm;
+
+    if hatchPitchUm > 0
+        [hatchStartUm, hatchEndUm] = localHexagonHatchSegments( ...
+            layerCenterUm, innerHatchSideUm, rotationDeg, hatchPitchUm);
+    else
+        hatchStartUm = zeros(0, 3);
+        hatchEndUm = zeros(0, 3);
+    end
+
+    if releaseOrder == "inside_out"
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
+            allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            hatchStartUm, hatchEndUm, hatchPowerPercent, hatchSpeedMmPerSecond);
+        ringOffsetsUm = ((ringCount - 1):-1:0) * ringPitchUm;
+    else
+        ringOffsetsUm = (0:(ringCount - 1)) * ringPitchUm;
+    end
+
+    for iRing = 1:numel(ringOffsetsUm)
+        ringSideLengthUm = sideLengthUm - ringOffsetsUm(iRing) / cosd(30);
+        if ringSideLengthUm <= 0
+            error('Release ring %d collapsed. Reduce ring count or ring pitch.', iRing);
+        end
+        [ringStartUm, ringEndUm] = localHexagonEdgeSegments( ...
+            layerCenterUm, ringSideLengthUm, rotationDeg, direction);
+        if ringOffsetsUm(iRing) == 0
+            segmentPowerPercent = powerPercent;
+            segmentSpeedMmPerSecond = cutSpeedMmPerSecond;
+        else
+            segmentPowerPercent = ringPowerPercent;
+            segmentSpeedMmPerSecond = ringSpeedMmPerSecond;
+        end
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
+            allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            ringStartUm, ringEndUm, segmentPowerPercent, segmentSpeedMmPerSecond);
+    end
+
+    if releaseOrder == "outside_in"
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
+            allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            hatchStartUm, hatchEndUm, hatchPowerPercent, hatchSpeedMmPerSecond);
+    end
+end
+
+if isempty(allStartUm)
+    error('Hexagon release cut generated zero cut segments.');
+end
+
+data = localBuildCutScanData(allStartUm, allEndUm, allPowerValues, ...
+    allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, 0);
+[leadInValuesUm, leadOutValuesUm] = localCutLeadDistances( ...
+    allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor);
+
+allX = [data(:, 8); data(:, 1); data(:, 5); data(:, 11)];
+allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
+allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
+
+prefix = sprintf('hexrelease_%s_side_%s_rot_%s_layers_%d_dz_%s_rings_%d_rpitch_%s_margin_%s_hatch_%s_wallP_%s_wallS_%s_ringP_%s_ringS_%s_hatchP_%s_hatchS_%s', ...
+    char(releaseOrder), ...
+    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    layerCount, localCompactNumber(zStepUm), ringCount, localCompactNumber(ringPitchUm), ...
+    localCompactNumber(wallMarginUm), localCompactNumber(hatchPitchUm), ...
+    localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
+    localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
+    localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+
+summary = struct();
+summary.pointCount = size(data, 1);
+summary.sourcePointCount = size(data, 1);
+summary.xRangeMm = [min(allX), max(allX)];
+summary.yRangeMm = [min(allY), max(allY)];
+summary.zRangeMm = [min(allZ), max(allZ)];
+summary.powerRange = [min(data(:, 4)), max(data(:, 4))];
+summary.latticeType = 'hexagon_release_cut';
+summary.latticeLabel = 'Hexagon Release Cut';
+summary.pitchLabel = sprintf(['side %s um, rotation %s deg, %s; %d Z layer(s), dz %s um; ', ...
+    '%d outline ring(s) at %s um pitch; hatch pitch %s um with %s um wall margin; ', ...
+    'wall P/speed %s/%s, ring P/speed %s/%s, hatch P/speed %s/%s'], ...
+    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    localHexagonCutDirectionLabel(direction), layerCount, localCompactNumber(zStepUm), ...
+    ringCount, localCompactNumber(ringPitchUm), localCompactNumber(hatchPitchUm), ...
+    localCompactNumber(wallMarginUm), ...
+    localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
+    localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
+    localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+summary.rowSpacingUm = hatchPitchUm;
+summary.regionMode = 'hexagon_release_cut';
+summary.regionLabel = 'Interior hatch plus concentric outline release cuts';
+summary.pathMode = 'hexagon_release_cut';
+if releaseOrder == "outside_in"
+    summary.pathModeLabel = 'per Z layer: final outer wall, then outer-to-inner release rings, then internal 3-direction hatch';
+    orderSummary = 'final outer wall first on each layer';
+else
+    summary.pathModeLabel = 'per Z layer: internal 3-direction hatch, then inner-to-outer hexagon rings';
+    orderSummary = 'final outer wall last on each layer';
+end
+summary.powerMode = 'fixed_value';
+summary.powerModeLabel = sprintf('Wall/Ring/Hatch fixed values: %s / %s / %s', ...
+    localCompactNumber(powerPercent), localCompactNumber(ringPowerPercent), localCompactNumber(hatchPowerPercent));
+summary.layerTraversalLabel = sprintf('Z layers follow Z = %s um + k * %s um, %s', ...
+    localCompactNumber(centerUm(3)), localCompactNumber(zStepUm), orderSummary);
+summary.prefix = prefix;
+summary.releaseOrder = char(releaseOrder);
+summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
+summary.releaseRingPowerPercent = ringPowerPercent;
+summary.releaseRingSpeedMmPerSecond = ringSpeedMmPerSecond;
+summary.releaseHatchPowerPercent = hatchPowerPercent;
+summary.releaseHatchSpeedMmPerSecond = hatchSpeedMmPerSecond;
+summary.accelerationMmPerSecondSquared = accelerationMmPerSecondSquared;
+summary.leadInUm = [min(leadInValuesUm), max(leadInValuesUm)];
+summary.leadOutUm = [min(leadOutValuesUm), max(leadOutValuesUm)];
+summary.releaseWallMarginUm = wallMarginUm;
+summary.releaseRingCount = ringCount;
+summary.releaseRingPitchUm = ringPitchUm;
+summary.releaseHatchPitchUm = hatchPitchUm;
+summary.releaseLayerCount = layerCount;
+summary.releaseZStepUm = zStepUm;
+end
+
+function [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
+    allStartUm, allEndUm, allPowerValues, allSpeedValues, segmentStartUm, segmentEndUm, powerPercent, speedMmPerSecond)
+segmentCount = size(segmentStartUm, 1);
+if segmentCount == 0
+    return;
+end
+
+allStartUm = [allStartUm; segmentStartUm];
+allEndUm = [allEndUm; segmentEndUm];
+allPowerValues = [allPowerValues; repmat(powerPercent, segmentCount, 1)];
+allSpeedValues = [allSpeedValues; repmat(speedMmPerSecond, segmentCount, 1)];
+end
+
+function [cutStartUm, cutEndUm] = localHexagonEdgeSegments(centerUm, sideLengthUm, rotationDeg, direction)
+verticesUm = localHexagonVertices(centerUm, sideLengthUm, rotationDeg, direction);
+cutStartUm = verticesUm;
+cutEndUm = verticesUm([2:6, 1], :);
+end
+
+function verticesUm = localHexagonVertices(centerUm, sideLengthUm, rotationDeg, direction)
+angleStep = 60;
+if localNormalizeOption(direction) == "clockwise"
+    angleStep = -60;
+end
+
+anglesDeg = rotationDeg + (0:5).' * angleStep;
+verticesUm = [ ...
+    centerUm(1) + sideLengthUm * cosd(anglesDeg), ...
+    centerUm(2) + sideLengthUm * sind(anglesDeg), ...
+    repmat(centerUm(3), 6, 1)];
+end
+
+function data = localBuildCutScanData(cutStartUm, cutEndUm, powerPercent, cutSpeedMmPerSecond, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, pauseSeconds)
+if isempty(cutStartUm)
+    data = zeros(0, 16);
+    return;
+end
+
+if size(cutStartUm, 2) ~= 3 || size(cutEndUm, 2) ~= 3 || size(cutStartUm, 1) ~= size(cutEndUm, 1)
+    error('Cut segments must provide matching Nx3 start and end coordinates.');
+end
+
+edgeVectorsUm = cutEndUm - cutStartUm;
+edgeLengthsUm = sqrt(sum(edgeVectorsUm .^ 2, 2));
+if any(edgeLengthsUm <= eps)
+    error('Cut segments must have non-zero length.');
+end
+
+segmentCount = size(cutStartUm, 1);
+powerValues = localCutColumnValues(powerPercent, segmentCount, 'Cut power');
+speedValues = localCutColumnValues(cutSpeedMmPerSecond, segmentCount, 'Cut speed');
+if any(powerValues < 0)
+    error('Cut power values must be greater than or equal to 0.');
+end
+if any(speedValues <= 0)
+    error('Cut speed values must be greater than 0.');
+end
+[leadInUm, leadOutUm] = localCutLeadDistances(speedValues, ...
+    accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor);
+
+unitVectors = edgeVectorsUm ./ edgeLengthsUm;
+leadStartUm = cutStartUm - unitVectors .* leadInUm;
+exitEndUm = cutEndUm + unitVectors .* leadOutUm;
+
+leadSpeedValues = speedValues;
+if isscalar(pauseSeconds)
+    pauseSeconds = repmat(pauseSeconds, segmentCount, 1);
+else
+    pauseSeconds = pauseSeconds(:);
+end
+if numel(pauseSeconds) ~= segmentCount
+    error('Cut pause values must be scalar or match the cut segment count.');
+end
+
+data = [cutStartUm / 1000, powerValues, cutEndUm / 1000, ...
+    leadStartUm / 1000, exitEndUm / 1000, speedValues, leadSpeedValues, pauseSeconds];
+end
+
+function values = localCutColumnValues(value, segmentCount, label)
+if isscalar(value)
+    values = repmat(value, segmentCount, 1);
+else
+    values = value(:);
+end
+
+if numel(values) ~= segmentCount || any(~isfinite(values))
+    error('%s values must be finite and either scalar or match the cut segment count.', label);
+end
+end
+
+function [leadInUm, leadOutUm] = localCutLeadDistances(speedMmPerSecond, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor)
+speedMmPerSecond = speedMmPerSecond(:);
+baseLeadUm = (speedMmPerSecond .^ 2 ./ (2 * accelerationMmPerSecondSquared)) * 1000;
+leadInUm = baseLeadUm * leadSafetyFactor;
+leadOutUm = baseLeadUm * exitSafetyFactor;
+end
+
+function [hatchStartUm, hatchEndUm] = localHexagonHatchSegments(centerUm, sideLengthUm, rotationDeg, hatchPitchUm)
+hatchStartUm = zeros(0, 3);
+hatchEndUm = zeros(0, 3);
+if hatchPitchUm <= 0
+    return;
+end
+
+verticesUm = localHexagonVertices(centerUm, sideLengthUm, rotationDeg, "counter_clockwise");
+polygonXY = verticesUm(:, 1:2);
+centerXY = centerUm(1:2);
+familyAnglesDeg = rotationDeg + [0, 60, 120];
+lineCount = 0;
+minSegmentLengthUm = max(1e-6, hatchPitchUm * 0.05);
+
+for iFamily = 1:numel(familyAnglesDeg)
+    directionXY = [cosd(familyAnglesDeg(iFamily)), sind(familyAnglesDeg(iFamily))];
+    normalXY = [-directionXY(2), directionXY(1)];
+    projections = (polygonXY - centerXY) * normalXY.';
+    firstOffset = ceil((min(projections) - 1e-9) / hatchPitchUm) * hatchPitchUm;
+    lastOffset = floor((max(projections) + 1e-9) / hatchPitchUm) * hatchPitchUm;
+    offsets = firstOffset:hatchPitchUm:lastOffset;
+
+    for iOffset = 1:numel(offsets)
+        linePointXY = centerXY + offsets(iOffset) * normalXY;
+        [pointA, pointB, didClip] = localClipLineToPolygon(linePointXY, directionXY, polygonXY);
+        if ~didClip || norm(pointB - pointA) < minSegmentLengthUm
+            continue;
+        end
+
+        lineCount = lineCount + 1;
+        if mod(lineCount, 2) == 0
+            startXY = pointB;
+            endXY = pointA;
+        else
+            startXY = pointA;
+            endXY = pointB;
+        end
+
+        hatchStartUm(end + 1, :) = [startXY, centerUm(3)]; %#ok<AGROW>
+        hatchEndUm(end + 1, :) = [endXY, centerUm(3)]; %#ok<AGROW>
+    end
+end
+end
+
+function [pointA, pointB, didClip] = localClipLineToPolygon(linePointXY, directionXY, polygonXY)
+pointA = [nan, nan];
+pointB = [nan, nan];
+didClip = false;
+tValues = zeros(0, 1);
+vertexCount = size(polygonXY, 1);
+
+for iVertex = 1:vertexCount
+    nextVertex = iVertex + 1;
+    if nextVertex > vertexCount
+        nextVertex = 1;
+    end
+
+    edgeStartXY = polygonXY(iVertex, :);
+    edgeVectorXY = polygonXY(nextVertex, :) - edgeStartXY;
+    systemMatrix = [directionXY(:), -edgeVectorXY(:)];
+    if abs(det(systemMatrix)) < 1e-10
+        continue;
+    end
+
+    solution = systemMatrix \ (edgeStartXY(:) - linePointXY(:));
+    edgeParameter = solution(2);
+    if edgeParameter >= -1e-9 && edgeParameter <= 1 + 1e-9
+        tValues(end + 1, 1) = solution(1); %#ok<AGROW>
+    end
+end
+
+if numel(tValues) < 2
+    return;
+end
+
+tValues = sort(tValues);
+keepMask = [true; diff(tValues) > 1e-6];
+tValues = tValues(keepMask);
+if numel(tValues) < 2
+    return;
+end
+
+pointA = linePointXY + tValues(1) * directionXY;
+pointB = linePointXY + tValues(end) * directionXY;
+didClip = true;
 end
 
 function [xUm, yUm, zUm, layerIndex, rowIndex, info] = localGenerateLatticeUm(lattice)
