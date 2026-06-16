@@ -30,6 +30,10 @@ if latticeTypeStr == "hexagon_release_cut"
     [data, prefix, summary] = localGenerateHexagonReleaseCutFull(lattice);
     return;
 end
+if latticeTypeStr == "hexagon_release_cut_array"
+    [data, prefix, summary] = localGenerateHexagonReleaseCutArrayFull(lattice);
+    return;
+end
 
 region = localRequireStruct(params, 'region');
 power = localRequireStruct(params, 'power');
@@ -820,6 +824,92 @@ summary.releaseLayerCount = layerCount;
 summary.releaseZStepUm = zStepUm;
 end
 
+function [data, prefix, summary] = localGenerateHexagonReleaseCutArrayFull(lattice)
+arrayCenterUm = localVector3(localRequireField(lattice, 'centerUm'), 'Array center');
+sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
+rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
+arrayRows = localPositiveInteger(localFieldOrDefault(lattice, 'arrayRows', 3), 'Honeycomb array rows');
+arrayCols = localPositiveInteger(localFieldOrDefault(lattice, 'arrayCols', 3), 'Honeycomb array columns');
+selectionMask = localLogicalMatrix( ...
+    localRequireField(lattice, 'arraySelectionMask'), arrayRows, arrayCols, 'Honeycomb cut mask');
+
+selectedCellCount = nnz(selectionMask);
+totalCellCount = arrayRows * arrayCols;
+if selectedCellCount == 0
+    error('Select at least one honeycomb cell for Hexagon Release Cut Array.');
+end
+
+centersUm = localHoneycombArrayCenters(arrayCenterUm, sideLengthUm, rotationDeg, arrayRows, arrayCols);
+dataParts = cell(selectedCellCount, 1);
+selectedRows = zeros(selectedCellCount, 1);
+selectedCols = zeros(selectedCellCount, 1);
+partIndex = 0;
+firstSummary = struct();
+
+for iRow = 1:arrayRows
+    for iCol = 1:arrayCols
+        if ~selectionMask(iRow, iCol)
+            continue;
+        end
+
+        partIndex = partIndex + 1;
+        cellLattice = lattice;
+        cellLattice.type = 'Hexagon Release Cut';
+        cellLattice.centerUm = reshape(centersUm(iRow, iCol, :), 1, []);
+        [cellData, ~, cellSummary] = localGenerateHexagonReleaseCutFull(cellLattice);
+        dataParts{partIndex} = cellData;
+        selectedRows(partIndex) = iRow;
+        selectedCols(partIndex) = iCol;
+        if partIndex == 1
+            firstSummary = cellSummary;
+        end
+    end
+end
+
+data = vertcat(dataParts{:});
+allX = [data(:, 8); data(:, 1); data(:, 5); data(:, 11)];
+allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
+allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
+
+cellTags = strings(selectedCellCount, 1);
+for iCell = 1:selectedCellCount
+    cellTags(iCell) = sprintf('R%dC%d', selectedRows(iCell), selectedCols(iCell));
+end
+selectedCellText = char(strjoin(cellTags, ', '));
+selectedCellTag = localCompactCellTag(strjoin(cellTags, '-'));
+
+prefix = sprintf('hexrelease_array_%dx%d_sel_%d_side_%s_rot_%s_%s', ...
+    arrayRows, arrayCols, selectedCellCount, ...
+    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    selectedCellTag);
+
+summary = firstSummary;
+summary.pointCount = size(data, 1);
+summary.sourcePointCount = size(data, 1);
+summary.xRangeMm = [min(allX), max(allX)];
+summary.yRangeMm = [min(allY), max(allY)];
+summary.zRangeMm = [min(allZ), max(allZ)];
+summary.powerRange = [min(data(:, 4)), max(data(:, 4))];
+summary.latticeType = 'hexagon_release_cut_array';
+summary.latticeLabel = 'Hexagon Release Cut Array';
+summary.pitchLabel = sprintf('%dx%d honeycomb array, selected %d/%d cells (%s); %s', ...
+    arrayRows, arrayCols, selectedCellCount, totalCellCount, ...
+    selectedCellText, firstSummary.pitchLabel);
+summary.rowSpacingUm = sqrt(3) * sideLengthUm;
+summary.regionMode = 'hexagon_release_cut_array';
+summary.regionLabel = 'Selected honeycomb cells using hexagon release cuts';
+summary.pathMode = 'hexagon_release_cut_array';
+summary.pathModeLabel = sprintf('row-major selected cells; within each cell: %s', firstSummary.pathModeLabel);
+summary.layerTraversalLabel = sprintf('Selected honeycomb cells are written row-major; each cell uses %s', firstSummary.layerTraversalLabel);
+summary.prefix = prefix;
+summary.arrayRows = arrayRows;
+summary.arrayCols = arrayCols;
+summary.selectedCellCount = selectedCellCount;
+summary.totalCellCount = totalCellCount;
+summary.selectedCells = cellstr(cellTags);
+summary.arrayCenterUm = arrayCenterUm;
+end
+
 function [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
     allStartUm, allEndUm, allPowerValues, allSpeedValues, segmentStartUm, segmentEndUm, powerPercent, speedMmPerSecond)
 segmentCount = size(segmentStartUm, 1);
@@ -850,6 +940,34 @@ verticesUm = [ ...
     centerUm(1) + sideLengthUm * cosd(anglesDeg), ...
     centerUm(2) + sideLengthUm * sind(anglesDeg), ...
     repmat(centerUm(3), 6, 1)];
+end
+
+function centersUm = localHoneycombArrayCenters(arrayCenterUm, sideLengthUm, rotationDeg, arrayRows, arrayCols)
+xAxis = [cosd(rotationDeg), sind(rotationDeg), 0];
+yAxis = [-sind(rotationDeg), cosd(rotationDeg), 0];
+colStepUm = 1.5 * sideLengthUm * xAxis;
+rowStepUm = -sqrt(3) * sideLengthUm * yAxis;
+columnStaggerUm = 0.5 * rowStepUm;
+
+centersUm = zeros(arrayRows, arrayCols, 3);
+for iRow = 1:arrayRows
+    for iCol = 1:arrayCols
+        offsetUm = (iCol - 1) * colStepUm + (iRow - 1) * rowStepUm;
+        if mod(iCol - 1, 2) == 1
+            offsetUm = offsetUm + columnStaggerUm;
+        end
+        centersUm(iRow, iCol, :) = reshape(offsetUm, 1, 1, []);
+    end
+end
+
+flatOffsetsUm = reshape(centersUm, [], 3);
+offsetCenterUm = mean(flatOffsetsUm, 1);
+for iRow = 1:arrayRows
+    for iCol = 1:arrayCols
+        centeredOffsetUm = reshape(centersUm(iRow, iCol, :), 1, []) - offsetCenterUm + arrayCenterUm;
+        centersUm(iRow, iCol, :) = reshape(centeredOffsetUm, 1, 1, []);
+    end
+end
 end
 
 function data = localBuildCutScanData(cutStartUm, cutEndUm, powerPercent, cutSpeedMmPerSecond, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, pauseSeconds)
@@ -1535,6 +1653,69 @@ if ~(isscalar(value) && isnumeric(value) && isfinite(value))
 end
 end
 
+function mask = localLogicalMatrix(value, expectedRows, expectedCols, label)
+if istable(value)
+    value = table2array(value);
+end
+
+if iscell(value)
+    mask = false(size(value));
+    for iValue = 1:numel(value)
+        mask(iValue) = localLogicalScalar(value{iValue}, label);
+    end
+elseif islogical(value)
+    mask = value;
+elseif isnumeric(value)
+    if any(~isfinite(value(:)))
+        error('%s must contain only finite values.', label);
+    end
+    mask = value ~= 0;
+else
+    textValues = strtrim(string(value));
+    mask = strcmpi(textValues, "true") | strcmpi(textValues, "1") | ...
+        strcmpi(textValues, "yes") | strcmpi(textValues, "y");
+    invalidMask = ~(mask | strcmpi(textValues, "false") | strcmpi(textValues, "0") | ...
+        strcmpi(textValues, "no") | strcmpi(textValues, "n") | strlength(textValues) == 0);
+    if any(invalidMask(:))
+        error('%s must contain logical, 0/1, yes/no, or blank values.', label);
+    end
+end
+
+if ~isequal(size(mask), [expectedRows, expectedCols])
+    error('%s must be a %d-by-%d matrix.', label, expectedRows, expectedCols);
+end
+
+mask = logical(mask);
+end
+
+function value = localLogicalScalar(value, label)
+if isempty(value)
+    value = false;
+elseif islogical(value)
+    if ~isscalar(value)
+        error('%s cells must contain scalar logical values.', label);
+    end
+elseif isnumeric(value)
+    if ~(isscalar(value) && isfinite(value))
+        error('%s cells must contain finite scalar numeric values.', label);
+    end
+    value = value ~= 0;
+else
+    textValue = strtrim(string(value));
+    if strlength(textValue) == 0 || strcmpi(textValue, "false") || ...
+            strcmpi(textValue, "0") || strcmpi(textValue, "no") || strcmpi(textValue, "n")
+        value = false;
+    elseif strcmpi(textValue, "true") || strcmpi(textValue, "1") || ...
+            strcmpi(textValue, "yes") || strcmpi(textValue, "y")
+        value = true;
+    else
+        error('%s cells must contain logical, 0/1, yes/no, or blank values.', label);
+    end
+end
+
+value = logical(value);
+end
+
 function power = localValidatePowerVector(power, expectedCount, sourceName)
 if isscalar(power)
     power = repmat(power, expectedCount, 1);
@@ -1737,6 +1918,15 @@ end
 
 function textValue = localCompactNumber(value)
 textValue = regexprep(num2str(value, '%.15g'), '\s+', '');
+end
+
+function textValue = localCompactCellTag(value)
+textValue = char(value);
+textValue = regexprep(textValue, '[^A-Za-z0-9]+', '_');
+textValue = regexprep(textValue, '^_+|_+$', '');
+if strlength(string(textValue)) > 80
+    textValue = [textValue(1:80), '_more'];
+end
 end
 
 function value = localNormalizeOption(value)

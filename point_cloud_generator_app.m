@@ -50,8 +50,8 @@ latticeTab = uitab(controlTabs, 'Title', 'Lattice');
 latticeTab.Scrollable = 'on';
 powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
 
-latticeTabGrid = uigridlayout(latticeTab, [32, 1]);
-latticeTabGrid.RowHeight = repmat({'fit'}, 1, 32);
+latticeTabGrid = uigridlayout(latticeTab, [34, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 34);
 latticeTabGrid.ColumnWidth = {'1x'};
 latticeTabGrid.Padding = [6, 6, 6, 6];
 latticeTabGrid.RowSpacing = 4;
@@ -68,8 +68,8 @@ ui = struct();
 latticeGrid = latticeTabGrid;
 
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut'}, 'Segmented Grating', @onLatticeTypeChanged, ...
-    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut'}, tips.latticeType);
+    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, 'Segmented Grating', @onLatticeTypeChanged, ...
+    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
@@ -329,6 +329,35 @@ ui.HexReleaseHatchSpeedField = hexReleaseMotionFields(4);
     {'Inside-out', 'Outside-in'}, tips.hexReleaseOrder);
 ui.HexReleaseOrderRow.Layout.Row = 32;
 
+[ui.HexArraySizePanel, hexArraySizeFields] = createValuePanel( ...
+    latticeGrid, 'Honeycomb Array', {'Rows', 'Columns'}, [3, 3], tips.hexArraySize);
+ui.HexArraySizePanel.Layout.Row = 33;
+ui.HexArrayRowsField = hexArraySizeFields(1);
+ui.HexArrayColsField = hexArraySizeFields(2);
+ui.HexArrayRowsField.ValueChangedFcn = @onHexArraySizeChanged;
+ui.HexArrayColsField.ValueChangedFcn = @onHexArraySizeChanged;
+
+ui.HexArraySelectionPanel = uipanel(latticeGrid, 'Title', 'Selected Honeycomb Cells');
+ui.HexArraySelectionPanel.Layout.Row = 34;
+hexArraySelectionGrid = uigridlayout(ui.HexArraySelectionPanel, [1, 1]);
+hexArraySelectionGrid.RowHeight = {hexArraySelectionTableHeight(3)};
+hexArraySelectionGrid.ColumnWidth = {'1x'};
+hexArraySelectionGrid.Padding = [5, 5, 5, 5];
+
+hexArrayDefaultMask = false(3, 3);
+hexArrayDefaultMask(sub2ind([3, 3], [1, 1, 2, 3], [2, 3, 2, 1])) = true;
+ui.HexArraySelectionTable = uitable(hexArraySelectionGrid, ...
+    'Data', hexArrayDefaultMask, ...
+    'ColumnName', {'C1', 'C2', 'C3'}, ...
+    'RowName', {'R1', 'R2', 'R3'}, ...
+    'ColumnFormat', repmat({'logical'}, 1, 3), ...
+    'ColumnEditable', true(1, 3), ...
+    'ColumnWidth', repmat({54}, 1, 3), ...
+    'CellEditCallback', @onHexArraySelectionChanged);
+ui.HexArraySelectionTable.Layout.Row = 1;
+ui.HexArraySelectionTable.Layout.Column = 1;
+applyTooltip({ui.HexArraySelectionPanel, ui.HexArraySelectionTable}, tips.hexArraySelection);
+
 ui.PowerPanel = uipanel(powerOrderGrid, 'Title', 'Power');
 ui.PowerPanel.Layout.Row = 1;
 ui.PowerPanel.Layout.Column = 1;
@@ -546,7 +575,9 @@ applyCompactFonts(fig);
         isZPush = latticeType == "Z Push";
         isHexCut = latticeType == "Hexagon Cut";
         isHexReleaseCut = latticeType == "Hexagon Release Cut";
-        isCutMode = isHexCut || isHexReleaseCut;
+        isHexReleaseArray = latticeType == "Hexagon Release Cut Array";
+        isHexReleaseMode = isHexReleaseCut || isHexReleaseArray;
+        isCutMode = isHexCut || isHexReleaseMode;
         isFixedOrder = isStaircase || isGrating || isZPush || isCutMode;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
@@ -579,10 +610,18 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 26, ui.HexCutGeometryPanel, 'fit', isCutMode);
         setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isCutMode);
         setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isCutMode);
-        setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isHexReleaseCut);
-        setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isHexReleaseCut);
-        setPanelRow(latticeGrid, 31, ui.HexReleaseMotionPanel, 'fit', isHexReleaseCut);
-        setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isHexReleaseCut);
+        if isHexReleaseArray
+            ui.HexCutCenterPanel.Title = 'Array Center (um)';
+            syncHexArraySelectionTable();
+        else
+            ui.HexCutCenterPanel.Title = 'Cut Center (um)';
+        end
+        setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isHexReleaseMode);
+        setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isHexReleaseMode);
+        setPanelRow(latticeGrid, 31, ui.HexReleaseMotionPanel, 'fit', isHexReleaseMode);
+        setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isHexReleaseMode);
+        setPanelRow(latticeGrid, 33, ui.HexArraySizePanel, 'fit', isHexReleaseArray);
+        setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
 
         setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isCutMode);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
@@ -674,6 +713,15 @@ applyCompactFonts(fig);
         syncGratingChannelStartsTable();
     end
 
+    function onHexArraySizeChanged(~, ~)
+        syncHexArraySelectionTable();
+        updateTraversalNote();
+    end
+
+    function onHexArraySelectionChanged(~, ~)
+        updateTraversalNote();
+    end
+
     function syncGratingChannelStartsTable()
         channelRows = round(max(1, ui.GratingChannelRowsField.Value));
         channelCols = round(max(1, ui.GratingChannelColsField.Value));
@@ -687,6 +735,83 @@ applyCompactFonts(fig);
         if string(ui.LatticeTypeDropDown.Value) == "Segmented Grating"
             latticeGrid.RowHeight{20} = gratingChannelTablePanelHeight(channelRows);
         end
+    end
+
+    function syncHexArraySelectionTable()
+        arrayRows = validateHexArrayDimension(ui.HexArrayRowsField.Value);
+        arrayCols = validateHexArrayDimension(ui.HexArrayColsField.Value);
+        ui.HexArrayRowsField.Value = arrayRows;
+        ui.HexArrayColsField.Value = arrayCols;
+
+        oldMask = hexArraySelectionTableMask();
+        newMask = false(arrayRows, arrayCols);
+        copyRows = min(arrayRows, size(oldMask, 1));
+        copyCols = min(arrayCols, size(oldMask, 2));
+        if copyRows > 0 && copyCols > 0
+            newMask(1:copyRows, 1:copyCols) = oldMask(1:copyRows, 1:copyCols);
+        end
+
+        ui.HexArraySelectionTable.Data = newMask;
+        ui.HexArraySelectionTable.RowName = cellstr(compose('R%d', 1:arrayRows));
+        ui.HexArraySelectionTable.ColumnName = cellstr(compose('C%d', 1:arrayCols));
+        ui.HexArraySelectionTable.ColumnFormat = repmat({'logical'}, 1, arrayCols);
+        ui.HexArraySelectionTable.ColumnEditable = true(1, arrayCols);
+        ui.HexArraySelectionTable.ColumnWidth = repmat({54}, 1, arrayCols);
+
+        tableHeight = hexArraySelectionTableHeight(arrayRows);
+        hexArraySelectionGrid.RowHeight = {tableHeight};
+        if string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut Array"
+            latticeGrid.RowHeight{34} = hexArraySelectionPanelHeight(arrayRows);
+        end
+    end
+
+    function mask = hexArraySelectionTableMask()
+        data = ui.HexArraySelectionTable.Data;
+        if istable(data)
+            data = table2array(data);
+        end
+
+        if iscell(data)
+            mask = false(size(data));
+            for iCell = 1:numel(data)
+                mask(iCell) = parseHexArraySelectionValue(data{iCell});
+            end
+        elseif islogical(data)
+            mask = data;
+        elseif isnumeric(data)
+            mask = data ~= 0;
+        else
+            textValues = string(data);
+            mask = strcmpi(textValues, "true") | strcmpi(textValues, "1") | ...
+                strcmpi(textValues, "yes") | strcmpi(textValues, "y");
+        end
+
+        mask = logical(mask);
+    end
+
+    function value = parseHexArraySelectionValue(cellValue)
+        if isempty(cellValue) || ismissingValue(cellValue)
+            value = false;
+        elseif islogical(cellValue)
+            value = cellValue;
+        elseif isnumeric(cellValue)
+            value = isscalar(cellValue) && isfinite(cellValue) && cellValue ~= 0;
+        else
+            textValue = strtrim(string(cellValue));
+            value = strcmpi(textValue, "true") || strcmpi(textValue, "1") || ...
+                strcmpi(textValue, "yes") || strcmpi(textValue, "y");
+        end
+    end
+
+    function dimension = validateHexArrayDimension(value)
+        if ~(isscalar(value) && isnumeric(value) && isfinite(value))
+            dimension = 3;
+            return;
+        end
+
+        dimension = round(value);
+        dimension = max(1, dimension);
+        dimension = min(25, dimension);
     end
 
     function resizeGratingStartTable(tableHandle, channelRows, channelCols)
@@ -720,6 +845,15 @@ applyCompactFonts(fig);
     function tableHeight = gratingStartTableHeight(channelRows)
         tableHeight = 58 + 32 * channelRows;
         tableHeight = max(150, tableHeight);
+    end
+
+    function tableHeight = hexArraySelectionTableHeight(arrayRows)
+        tableHeight = 58 + 28 * arrayRows;
+        tableHeight = max(140, min(420, tableHeight));
+    end
+
+    function panelHeight = hexArraySelectionPanelHeight(arrayRows)
+        panelHeight = hexArraySelectionTableHeight(arrayRows) + 38;
     end
 
     function contentHeight = gratingChannelStartsContentHeight(channelRows)
@@ -894,7 +1028,7 @@ applyCompactFonts(fig);
             params.lattice.pushCount = round(max(1, ui.ZPushCountField.Value));
             params.lattice.pushStepUm = ui.ZPushStepField.Value;
             params.lattice.intervalSeconds = ui.ZPushIntervalField.Value;
-        elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut"
+        elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
             params.lattice.centerUm = [ ...
                 ui.HexCutCenterXField.Value, ...
                 ui.HexCutCenterYField.Value, ...
@@ -907,7 +1041,7 @@ applyCompactFonts(fig);
             params.lattice.accelerationMmPerSecondSquared = ui.HexCutAccelerationField.Value;
             params.lattice.leadSafetyFactor = ui.HexCutLeadSafetyField.Value;
             params.lattice.exitSafetyFactor = ui.HexCutExitSafetyField.Value;
-            if latticeType == "Hexagon Release Cut"
+            if latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
                 params.lattice.releaseWallMarginUm = ui.HexReleaseWallMarginField.Value;
                 params.lattice.releaseRingCount = round(max(1, ui.HexReleaseRingCountField.Value));
                 params.lattice.releaseRingPitchUm = ui.HexReleaseRingPitchField.Value;
@@ -919,6 +1053,12 @@ applyCompactFonts(fig);
                 params.lattice.releaseHatchPowerPercent = ui.HexReleaseHatchPowerField.Value;
                 params.lattice.releaseHatchSpeedMmPerSecond = ui.HexReleaseHatchSpeedField.Value;
                 params.lattice.releaseOrder = string(ui.HexReleaseOrderDropDown.Value);
+                if latticeType == "Hexagon Release Cut Array"
+                    syncHexArraySelectionTable();
+                    params.lattice.arrayRows = validateHexArrayDimension(ui.HexArrayRowsField.Value);
+                    params.lattice.arrayCols = validateHexArrayDimension(ui.HexArrayColsField.Value);
+                    params.lattice.arraySelectionMask = hexArraySelectionTableMask();
+                end
             end
         else
             params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
@@ -1044,7 +1184,8 @@ applyCompactFonts(fig);
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
         isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
-        isCutMode = isHexCut || isHexReleaseCut;
+        isHexReleaseArray = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut Array";
+        isCutMode = isHexCut || isHexReleaseCut || isHexReleaseArray;
         planConfig = struct();
         planConfig.mode = normalizePlanOption(ui.ExposureModeDropDown.Value);
         planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
@@ -1171,12 +1312,13 @@ applyCompactFonts(fig);
             return;
         end
 
-        if latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut"
+        if latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
             speed = ui.HexCutSpeedField.Value;
             acceleration = ui.HexCutAccelerationField.Value;
             leadSafety = ui.HexCutLeadSafetyField.Value;
             exitSafety = ui.HexCutExitSafetyField.Value;
-            isReleaseCut = latticeType == "Hexagon Release Cut";
+            isReleaseCut = latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array";
+            isReleaseArray = latticeType == "Hexagon Release Cut Array";
             if isReleaseCut
                 ringSpeed = ui.HexReleaseRingSpeedField.Value;
                 hatchSpeed = ui.HexReleaseHatchSpeedField.Value;
@@ -1218,6 +1360,11 @@ applyCompactFonts(fig);
                     detailText = sprintf('Each edge starts %.4g um before the cut start, exposes during the edge, then exits %.4g um after the cut end.', ...
                         baseLeadUm * leadSafety, baseLeadUm * exitSafety);
                 end
+            end
+            if isReleaseArray
+                selectedCount = nnz(hexArraySelectionTableMask());
+                totalCount = validateHexArrayDimension(ui.HexArrayRowsField.Value) * validateHexArrayDimension(ui.HexArrayColsField.Value);
+                detailText = sprintf('Selected %d/%d honeycomb cell(s). %s', selectedCount, totalCount, detailText);
             end
             ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
             return;
@@ -1402,7 +1549,7 @@ modes = lower(strtrim(string(value)));
 modes = regexprep(modes, '[\s-]+', '_');
 modes(modes == "axis_scan") = "scan";
 modes(modes == "point_dwell") = "point";
-modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut") = "cut";
+modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut" | modes == "hexagon_release_cut_array") = "cut";
 if any(~ismember(modes, ["point", "scan", "cut"]))
     error('The mode column only supports point, scan, or cut.');
 end
@@ -1698,7 +1845,7 @@ end
 
 function tips = parameterTooltips()
 tips = struct();
-tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds internal hatch and concentric release rings.';
+tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds internal hatch and concentric release rings; Hexagon Release Cut Array repeats that cut on selected honeycomb cells.';
 tips.counts = { ...
     'Number of generated points along X; must be a positive integer.', ...
     'Number of generated points along Y; must be a positive integer.', ...
@@ -1808,6 +1955,11 @@ tips.hexReleaseMotion = { ...
     'Stage speed used for internal 3-direction hatch destruction lines, in mm/s.'};
 tips.hexReleaseOrder = ['Inside-out writes hatch first, then inward release rings, and the final wall last; ', ...
     'Outside-in writes the final wall first, then release rings inward, and hatch last.'];
+tips.hexArraySize = { ...
+    'Number of selectable honeycomb rows in the cut mask table.', ...
+    'Number of selectable honeycomb columns in the cut mask table.'};
+tips.hexArraySelection = ['Checked cells are cut with the same Hexagon Release Cut recipe. ', ...
+    'The array is centered on the Center X/Y/Z values; columns are staggered to form a close-packed honeycomb.'];
 tips.powerMode = 'Choose how the power column is generated for each point: fixed value, formula, or linear interpolation by Z depth.';
 tips.fixedPower = 'Single power value used for all points in fixed-power mode.';
 tips.powerFormula = 'Custom power formula; x, y, and z variables are in um.';
