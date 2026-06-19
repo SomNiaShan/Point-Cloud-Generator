@@ -95,6 +95,8 @@ summary.prefix = prefix;
 end
 
 function [data, prefix, summary] = localGenerateStaircaseFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth Count');
 zStartUm = localFiniteScalar(localRequireField(lattice, 'zStartUm'), 'Z Start');
 zStepUm = localFiniteScalar(localRequireField(lattice, 'zStepUm'), 'Z Step');
@@ -163,7 +165,7 @@ data = localSortRowsByZAscending(data);
 
 prefix = localBuildStaircasePrefix( ...
     nDepths, nPowers, zStartUm, zStepUm, powerStart, powerEnd, ...
-    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm);
+    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm, displayUnit);
 
 summary = struct();
 summary.pointCount = totalPoints;
@@ -174,10 +176,10 @@ summary.zRangeMm = [min(zMm), max(zMm)];
 summary.powerRange = [min(pVals), max(pVals)];
 summary.latticeType = 'staircase';
 summary.latticeLabel = 'Staircase';
-summary.pitchLabel = sprintf('Patch %dx%d, pitch X/Y: %s/%s um, gap X/Y: %s/%s um', ...
+summary.pitchLabel = sprintf('Patch %dx%d, pitch X/Y: %s/%s %s, gap X/Y: %s/%s %s', ...
     patchNx, patchNy, ...
-    localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), ...
-    localCompactNumber(gapXUm), localCompactNumber(gapYUm));
+    localCompactDistance(pitchXUm, displayUnit), localCompactDistance(pitchYUm, displayUnit), unitText, ...
+    localCompactDistance(gapXUm, displayUnit), localCompactDistance(gapYUm, displayUnit), unitText);
 summary.rowSpacingUm = strideY;
 summary.regionMode = 'full_block';
 summary.regionLabel = 'Full Block';
@@ -190,6 +192,8 @@ summary.prefix = prefix;
 end
 
 function [data, prefix, summary] = localGenerateSegmentedGratingFull(lattice, power)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 nDepths = localPositiveInteger(localRequireField(lattice, 'nDepths'), 'Depth Count');
 depthStartUm = localFiniteScalar(localRequireField(lattice, 'depthStartUm'), 'Depth start');
 depthStepUm = localFiniteScalar(localRequireField(lattice, 'depthStepUm'), 'Depth step');
@@ -322,7 +326,7 @@ prefix = localBuildSegmentedGratingPrefix( ...
     depthAxisName, periodAxisName, scanAxisName, nDepths, depthStartUm, depthStepUm, ...
     period1Um, nPeriods1, period2Um, nPeriods2, segmentGapUm, ...
     slabCopies1, slabPitch1Um, slabCopies2, slabPitch2Um, ...
-    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, power);
+    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, power, displayUnit);
 
 summary = struct();
 summary.pointCount = totalOperations;
@@ -333,17 +337,17 @@ summary.zRangeMm = [min(zMm), max(zMm)];
 summary.powerRange = [min(powerValues), max(powerValues)];
 summary.latticeType = 'segmented_grating';
 summary.latticeLabel = 'Segmented Grating';
-summary.pitchLabel = sprintf(['depth axis %s, period axis %s, scan axis %s; channels %dx%d (row axis %s/%s um, column axis %s/%s um); ', ...
-    'segment 1: %d periods x %s um, slab %d lines/%s um; segment gap %s um; ', ...
-    'segment 2: %d periods x %s um, slab %d lines/%s um'], ...
+summary.pitchLabel = sprintf(['depth axis %s, period axis %s, scan axis %s; channels %dx%d (row axis %s/%s %s, column axis %s/%s %s); ', ...
+    'segment 1: %d periods x %s %s, slab %d lines/%s %s; segment gap %s %s; ', ...
+    'segment 2: %d periods x %s %s, slab %d lines/%s %s'], ...
     depthAxisName, periodAxisName, scanAxisName, ...
-    channelRows, channelCols, rowAxisName, localCompactNumber(channelRowPitchUm), ...
-    colAxisName, localCompactNumber(channelColPitchUm), ...
-    nPeriods1, localCompactNumber(period1Um), ...
-    slabCopies1, localCompactNumber(slabPitch1Um), ...
-    localCompactNumber(segmentGapUm), ...
-    nPeriods2, localCompactNumber(period2Um), ...
-    slabCopies2, localCompactNumber(slabPitch2Um));
+    channelRows, channelCols, rowAxisName, localCompactDistance(channelRowPitchUm, displayUnit), unitText, ...
+    colAxisName, localCompactDistance(channelColPitchUm, displayUnit), unitText, ...
+    nPeriods1, localCompactDistance(period1Um, displayUnit), unitText, ...
+    slabCopies1, localCompactDistance(slabPitch1Um, displayUnit), unitText, ...
+    localCompactDistance(segmentGapUm, displayUnit), unitText, ...
+    nPeriods2, localCompactDistance(period2Um, displayUnit), unitText, ...
+    slabCopies2, localCompactDistance(slabPitch2Um, displayUnit), unitText);
 summary.rowSpacingUm = min(segmentPeriods);
 summary.regionMode = 'segmented_grating';
 summary.regionLabel = sprintf('%dx%d two-segment channel matrix', channelRows, channelCols);
@@ -533,6 +537,8 @@ end
 end
 
 function [data, prefix, summary] = localGenerateZPushFull(lattice, power)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 originUm = localVector3(localRequireField(lattice, 'originUm'), 'Initial position');
 moveXYUm = localVector2(localFieldOrDefault(lattice, 'moveXYUm', [0, 0]), 'XY move');
 pushCount = localPositiveInteger(localRequireField(lattice, 'pushCount'), 'Push count');
@@ -553,7 +559,7 @@ zMm = zUm / 1000;
 data = [xMm, yMm, zMm, powerValues, pauseSeconds];
 
 finalDepthUm = pushCount * pushStepUm;
-prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, power);
+prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, power, displayUnit);
 
 summary = struct();
 summary.pointCount = pushCount;
@@ -564,9 +570,10 @@ summary.zRangeMm = [min(zMm), max(zMm)];
 summary.powerRange = [min(powerValues), max(powerValues)];
 summary.latticeType = 'z_push';
 summary.latticeLabel = 'Z Push';
-summary.pitchLabel = sprintf('XY target: X0 + %s um, Y0 + %s um; Z step -%s um, final -%s um; interval %s s', ...
-    localCompactNumber(moveXYUm(1)), localCompactNumber(moveXYUm(2)), ...
-    localCompactNumber(pushStepUm), localCompactNumber(finalDepthUm), localCompactNumber(intervalSeconds));
+summary.pitchLabel = sprintf('XY target: X0 + %s %s, Y0 + %s %s; Z step -%s %s, final -%s %s; interval %s s', ...
+    localCompactDistance(moveXYUm(1), displayUnit), unitText, localCompactDistance(moveXYUm(2), displayUnit), unitText, ...
+    localCompactDistance(pushStepUm, displayUnit), unitText, localCompactDistance(finalDepthUm, displayUnit), unitText, ...
+    localCompactNumber(intervalSeconds));
 summary.rowSpacingUm = pushStepUm;
 summary.regionMode = 'z_push';
 summary.regionLabel = 'Single-point push';
@@ -574,12 +581,14 @@ summary.pathMode = 'z_push';
 summary.pathModeLabel = 'fixed XY, step toward -Z (deeper)';
 summary.powerMode = char(powerMode);
 summary.powerModeLabel = localPowerModeLabel(powerMode);
-summary.layerTraversalLabel = sprintf('from Z0 - %s um to Z0 - %s um (%d pushes deeper)', ...
-    localCompactNumber(pushStepUm), localCompactNumber(finalDepthUm), pushCount);
+summary.layerTraversalLabel = sprintf('from Z0 - %s %s to Z0 - %s %s (%d pushes deeper)', ...
+    localCompactDistance(pushStepUm, displayUnit), unitText, localCompactDistance(finalDepthUm, displayUnit), unitText, pushCount);
 summary.prefix = prefix;
 end
 
 function [data, prefix, summary] = localGenerateHexagonCutFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 centerUm = localVector3(localRequireField(lattice, 'centerUm'), 'Cut center');
 sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
 rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
@@ -607,9 +616,9 @@ allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
 allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
 
 prefix = sprintf('hexcut_side_%s_rot_%s_speed_%s_P_%s_leadin_%s', ...
-    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    localCompactDistance(sideLengthUm, displayUnit), localCompactNumber(rotationDeg), ...
     localCompactNumber(cutSpeedMmPerSecond), localCompactNumber(powerPercent), ...
-    localCompactNumber(leadInUm));
+    localCompactDistance(leadInUm, displayUnit));
 
 summary = struct();
 summary.pointCount = 6;
@@ -620,11 +629,11 @@ summary.zRangeMm = [min(allZ), max(allZ)];
 summary.powerRange = [powerPercent, powerPercent];
 summary.latticeType = 'hexagon_cut';
 summary.latticeLabel = 'Hexagon Cut';
-summary.pitchLabel = sprintf(['side %s um, rotation %s deg, %s; cut speed %s mm/s; ', ...
-    'lead-in %s um, lead-out %s um from acceleration %s mm/s^2'], ...
-    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+summary.pitchLabel = sprintf(['side %s %s, rotation %s deg, %s; cut speed %s mm/s; ', ...
+    'lead-in %s %s, lead-out %s %s from acceleration %s mm/s^2'], ...
+    localCompactDistance(sideLengthUm, displayUnit), unitText, localCompactNumber(rotationDeg), ...
     localHexagonCutDirectionLabel(direction), localCompactNumber(cutSpeedMmPerSecond), ...
-    localCompactNumber(leadInUm), localCompactNumber(leadOutUm), ...
+    localCompactDistance(leadInUm, displayUnit), unitText, localCompactDistance(leadOutUm, displayUnit), unitText, ...
     localCompactNumber(accelerationMmPerSecondSquared));
 summary.rowSpacingUm = sideLengthUm;
 summary.regionMode = 'hexagon_cut';
@@ -633,8 +642,8 @@ summary.pathMode = 'hexagon_cut';
 summary.pathModeLabel = 'edge-by-edge, laser off for lead-in/out and on for each edge';
 summary.powerMode = 'fixed_value';
 summary.powerModeLabel = sprintf('Fixed Value (%s)', localCompactNumber(powerPercent));
-summary.layerTraversalLabel = sprintf('Six %s edges in the XY plane at Z = %s um', ...
-    localHexagonCutDirectionLabel(direction), localCompactNumber(centerUm(3)));
+summary.layerTraversalLabel = sprintf('Six %s edges in the XY plane at Z = %s %s', ...
+    localHexagonCutDirectionLabel(direction), localCompactDistance(centerUm(3), displayUnit), unitText);
 summary.prefix = prefix;
 summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
 summary.accelerationMmPerSecondSquared = accelerationMmPerSecondSquared;
@@ -643,6 +652,8 @@ summary.leadOutUm = leadOutUm;
 end
 
 function [data, prefix, summary] = localGenerateHexagonReleaseCutFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 centerUm = localVector3(localRequireField(lattice, 'centerUm'), 'Cut center');
 sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
 rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
@@ -672,6 +683,7 @@ ringPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseRingPi
 hatchPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseHatchPitchUm', 80), 'Release hatch pitch');
 layerCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseLayerCount', 1), 'Release layer count');
 zStepUm = localFiniteScalar(localFieldOrDefault(lattice, 'releaseZStepUm', 0), 'Release Z step');
+repeatCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseRepeatCount', 1), 'Release repeat count');
 releaseOrder = localNormalizeOption(localFieldOrDefault(lattice, 'releaseOrder', 'inside_out'));
 if ~any(releaseOrder == ["inside_out", "outside_in"])
     error('Release order must be Inside-out or Outside-in.');
@@ -679,7 +691,8 @@ end
 
 apothemUm = sideLengthUm * cosd(30);
 if wallMarginUm >= apothemUm
-    error('Release wall margin must be smaller than the hexagon apothem %.4g um.', apothemUm);
+    error('Release wall margin must be smaller than the hexagon apothem %s %s.', ...
+        localCompactDistance(apothemUm, displayUnit), unitText);
 end
 if ringCount > 1 && ringPitchUm <= 0
     error('Release ring pitch must be greater than 0 when ring count is greater than 1.');
@@ -755,6 +768,7 @@ end
 
 data = localBuildCutScanData(allStartUm, allEndUm, allPowerValues, ...
     allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, 0);
+data = localRepeatRows(data, repeatCount);
 [leadInValuesUm, leadOutValuesUm] = localCutLeadDistances( ...
     allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor);
 
@@ -764,12 +778,15 @@ allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
 
 prefix = sprintf('hexrelease_%s_side_%s_rot_%s_layers_%d_dz_%s_rings_%d_rpitch_%s_margin_%s_hatch_%s_wallP_%s_wallS_%s_ringP_%s_ringS_%s_hatchP_%s_hatchS_%s', ...
     char(releaseOrder), ...
-    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
-    layerCount, localCompactNumber(zStepUm), ringCount, localCompactNumber(ringPitchUm), ...
-    localCompactNumber(wallMarginUm), localCompactNumber(hatchPitchUm), ...
+    localCompactDistance(sideLengthUm, displayUnit), localCompactNumber(rotationDeg), ...
+    layerCount, localCompactDistance(zStepUm, displayUnit), ringCount, localCompactDistance(ringPitchUm, displayUnit), ...
+    localCompactDistance(wallMarginUm, displayUnit), localCompactDistance(hatchPitchUm, displayUnit), ...
     localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
     localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
     localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+if repeatCount > 1
+    prefix = sprintf('%s_rep_%d', prefix, repeatCount);
+end
 
 summary = struct();
 summary.pointCount = size(data, 1);
@@ -780,16 +797,20 @@ summary.zRangeMm = [min(allZ), max(allZ)];
 summary.powerRange = [min(data(:, 4)), max(data(:, 4))];
 summary.latticeType = 'hexagon_release_cut';
 summary.latticeLabel = 'Hexagon Release Cut';
-summary.pitchLabel = sprintf(['side %s um, rotation %s deg, %s; %d Z layer(s), dz %s um; ', ...
-    '%d outline ring(s) at %s um pitch; hatch pitch %s um with %s um wall margin; ', ...
+summary.pitchLabel = sprintf(['side %s %s, rotation %s deg, %s; %d Z layer(s), dz %s %s; ', ...
+    '%d outline ring(s) at %s %s pitch; hatch pitch %s %s with %s %s wall margin; ', ...
     'wall P/speed %s/%s, ring P/speed %s/%s, hatch P/speed %s/%s'], ...
-    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
-    localHexagonCutDirectionLabel(direction), layerCount, localCompactNumber(zStepUm), ...
-    ringCount, localCompactNumber(ringPitchUm), localCompactNumber(hatchPitchUm), ...
-    localCompactNumber(wallMarginUm), ...
+    localCompactDistance(sideLengthUm, displayUnit), unitText, localCompactNumber(rotationDeg), ...
+    localHexagonCutDirectionLabel(direction), layerCount, localCompactDistance(zStepUm, displayUnit), unitText, ...
+    ringCount, localCompactDistance(ringPitchUm, displayUnit), unitText, ...
+    localCompactDistance(hatchPitchUm, displayUnit), unitText, ...
+    localCompactDistance(wallMarginUm, displayUnit), unitText, ...
     localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
     localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
     localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+if repeatCount > 1
+    summary.pitchLabel = sprintf('%s; repeated %d time(s)', summary.pitchLabel, repeatCount);
+end
 summary.rowSpacingUm = hatchPitchUm;
 summary.regionMode = 'hexagon_release_cut';
 summary.regionLabel = 'Interior hatch plus concentric outline release cuts';
@@ -804,8 +825,9 @@ end
 summary.powerMode = 'fixed_value';
 summary.powerModeLabel = sprintf('Wall/Ring/Hatch fixed values: %s / %s / %s', ...
     localCompactNumber(powerPercent), localCompactNumber(ringPowerPercent), localCompactNumber(hatchPowerPercent));
-summary.layerTraversalLabel = sprintf('Z layers follow Z = %s um + k * %s um, %s', ...
-    localCompactNumber(centerUm(3)), localCompactNumber(zStepUm), orderSummary);
+summary.layerTraversalLabel = sprintf('Z layers follow Z = %s %s + k * %s %s, %s', ...
+    localCompactDistance(centerUm(3), displayUnit), unitText, ...
+    localCompactDistance(zStepUm, displayUnit), unitText, orderSummary);
 summary.prefix = prefix;
 summary.releaseOrder = char(releaseOrder);
 summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
@@ -822,14 +844,17 @@ summary.releaseRingPitchUm = ringPitchUm;
 summary.releaseHatchPitchUm = hatchPitchUm;
 summary.releaseLayerCount = layerCount;
 summary.releaseZStepUm = zStepUm;
+summary.releaseRepeatCount = repeatCount;
 end
 
 function [data, prefix, summary] = localGenerateHexagonReleaseCutArrayFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
 arrayCenterUm = localVector3(localRequireField(lattice, 'centerUm'), 'Array center');
 sideLengthUm = localPositiveScalar(localRequireField(lattice, 'sideLengthUm'), 'Hexagon side length');
 rotationDeg = localFiniteScalar(localFieldOrDefault(lattice, 'rotationDeg', 0), 'Hexagon rotation');
 arrayRows = localPositiveInteger(localFieldOrDefault(lattice, 'arrayRows', 3), 'Honeycomb array rows');
 arrayCols = localPositiveInteger(localFieldOrDefault(lattice, 'arrayCols', 3), 'Honeycomb array columns');
+repeatCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseRepeatCount', 1), 'Release repeat count');
 selectionMask = localLogicalMatrix( ...
     localRequireField(lattice, 'arraySelectionMask'), arrayRows, arrayCols, 'Honeycomb cut mask');
 
@@ -856,6 +881,7 @@ for iRow = 1:arrayRows
         cellLattice = lattice;
         cellLattice.type = 'Hexagon Release Cut';
         cellLattice.centerUm = reshape(centersUm(iRow, iCol, :), 1, []);
+        cellLattice.releaseRepeatCount = 1;
         [cellData, ~, cellSummary] = localGenerateHexagonReleaseCutFull(cellLattice);
         dataParts{partIndex} = cellData;
         selectedRows(partIndex) = iRow;
@@ -867,6 +893,7 @@ for iRow = 1:arrayRows
 end
 
 data = vertcat(dataParts{:});
+data = localRepeatRows(data, repeatCount);
 allX = [data(:, 8); data(:, 1); data(:, 5); data(:, 11)];
 allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
 allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
@@ -880,8 +907,11 @@ selectedCellTag = localCompactCellTag(strjoin(cellTags, '-'));
 
 prefix = sprintf('hexrelease_array_%dx%d_sel_%d_side_%s_rot_%s_%s', ...
     arrayRows, arrayCols, selectedCellCount, ...
-    localCompactNumber(sideLengthUm), localCompactNumber(rotationDeg), ...
+    localCompactDistance(sideLengthUm, displayUnit), localCompactNumber(rotationDeg), ...
     selectedCellTag);
+if repeatCount > 1
+    prefix = sprintf('%s_rep_%d', prefix, repeatCount);
+end
 
 summary = firstSummary;
 summary.pointCount = size(data, 1);
@@ -895,6 +925,9 @@ summary.latticeLabel = 'Hexagon Release Cut Array';
 summary.pitchLabel = sprintf('%dx%d honeycomb array, selected %d/%d cells (%s); %s', ...
     arrayRows, arrayCols, selectedCellCount, totalCellCount, ...
     selectedCellText, firstSummary.pitchLabel);
+if repeatCount > 1
+    summary.pitchLabel = sprintf('%s; repeated %d time(s)', summary.pitchLabel, repeatCount);
+end
 summary.rowSpacingUm = sqrt(3) * sideLengthUm;
 summary.regionMode = 'hexagon_release_cut_array';
 summary.regionLabel = 'Selected honeycomb cells using hexagon release cuts';
@@ -908,6 +941,7 @@ summary.selectedCellCount = selectedCellCount;
 summary.totalCellCount = totalCellCount;
 summary.selectedCells = cellstr(cellTags);
 summary.arrayCenterUm = arrayCenterUm;
+summary.releaseRepeatCount = repeatCount;
 end
 
 function [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
@@ -921,6 +955,14 @@ allStartUm = [allStartUm; segmentStartUm];
 allEndUm = [allEndUm; segmentEndUm];
 allPowerValues = [allPowerValues; repmat(powerPercent, segmentCount, 1)];
 allSpeedValues = [allSpeedValues; repmat(speedMmPerSecond, segmentCount, 1)];
+end
+
+function data = localRepeatRows(data, repeatCount)
+if repeatCount <= 1 || isempty(data)
+    return;
+end
+
+data = repmat(data, repeatCount, 1);
 end
 
 function [cutStartUm, cutEndUm] = localHexagonEdgeSegments(centerUm, sideLengthUm, rotationDeg, direction)
@@ -1126,6 +1168,8 @@ function [xUm, yUm, zUm, layerIndex, rowIndex, info] = localGenerateLatticeUm(la
 latticeType = localLatticeType(lattice);
 counts = localCounts(lattice);
 originUm = localVector3(lattice.originUm, 'Origin');
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
 
 switch latticeType
     case "cartesian"
@@ -1139,9 +1183,11 @@ switch latticeType
         info = struct();
         info.type = 'cartesian';
         info.label = 'Cartesian';
-        info.pitchLabel = sprintf('X/Y/Z pitch: %s / %s / %s um', ...
-            localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), localCompactNumber(pitchZUm));
+        info.pitchLabel = sprintf('X/Y/Z pitch: %s / %s / %s %s', ...
+            localCompactDistance(pitchXUm, displayUnit), localCompactDistance(pitchYUm, displayUnit), ...
+            localCompactDistance(pitchZUm, displayUnit), unitText);
         info.rowSpacingUm = pitchYUm;
+        info.displayDistanceUnit = displayUnit;
         info.counts = counts;
         info.pitchXUm = pitchXUm;
         info.pitchYUm = pitchYUm;
@@ -1167,9 +1213,10 @@ switch latticeType
         info = struct();
         info.type = char(latticeType);
         info.label = localLatticeLabel(latticeType);
-        info.pitchLabel = sprintf('XY/Z pitch: %s / %s um', ...
-            localCompactNumber(pitchXYUm), localCompactNumber(pitchZUm));
+        info.pitchLabel = sprintf('XY/Z pitch: %s / %s %s', ...
+            localCompactDistance(pitchXYUm, displayUnit), localCompactDistance(pitchZUm, displayUnit), unitText);
         info.rowSpacingUm = rowSpacingUm;
+        info.displayDistanceUnit = displayUnit;
         info.counts = counts;
         info.pitchXYUm = pitchXYUm;
         info.pitchZUm = pitchZUm;
@@ -1347,6 +1394,7 @@ data = data(order, :);
 end
 
 function power = localEvaluatePower(powerConfig, powerMode, xUm, yUm, zUm)
+distanceUnit = localPowerDistanceUnit(powerConfig);
 switch powerMode
     case "fixed_value"
         fixedValue = localNonnegativeScalar(localFieldOrDefault(powerConfig, 'fixedValue', 10), 'Fixed Power');
@@ -1354,11 +1402,15 @@ switch powerMode
 
     case "custom_formula"
         formulaText = string(localFieldOrDefault(powerConfig, 'formula', ""));
-        power = localEvaluateCustomPowerFormula(formulaText, xUm, yUm, zUm);
+        power = localEvaluateCustomPowerFormula(formulaText, ...
+            localDisplayDistance(xUm, distanceUnit), ...
+            localDisplayDistance(yUm, distanceUnit), ...
+            localDisplayDistance(zUm, distanceUnit));
 
     case "linear_points"
         pointsText = string(localFieldOrDefault(powerConfig, 'linearPointsText', ""));
-        power = localEvaluateLinearPoints(pointsText, zUm);
+        power = localEvaluateLinearPoints(pointsText, ...
+            localDisplayDistance(zUm, distanceUnit), localLinearPointZLabel(distanceUnit));
 
     case "depth_model"
         if exist('depth2powerMgF2', 'file') ~= 2
@@ -1413,13 +1465,13 @@ end
 mask = localValidateMaskVector(mask, numel(zUm));
 end
 
-function power = localEvaluateLinearPoints(pointsText, zUm)
-[zPoints, powerPoints] = localParseLinearPoints(pointsText);
-power = interp1(zPoints, powerPoints, zUm, 'linear', 'extrap');
-power = localValidatePowerVector(power, numel(zUm), 'linear points');
+function power = localEvaluateLinearPoints(pointsText, zValues, zLabel)
+[zPoints, powerPoints] = localParseLinearPoints(pointsText, zLabel);
+power = interp1(zPoints, powerPoints, zValues, 'linear', 'extrap');
+power = localValidatePowerVector(power, numel(zValues), 'linear points');
 end
 
-function [zPoints, powerPoints] = localParseLinearPoints(pointsText)
+function [zPoints, powerPoints] = localParseLinearPoints(pointsText, zLabel)
 lines = splitlines(string(pointsText));
 zPoints = [];
 powerPoints = [];
@@ -1433,7 +1485,7 @@ for i = 1:numel(lines)
     parts = regexp(char(lineText), '[,\s;]+', 'split');
     parts = parts(~cellfun('isempty', parts));
     if numel(parts) ~= 2
-        error('Each linear-points row must contain two numbers: z_um and power.');
+        error('Each linear-points row must contain two numbers: %s and power.', zLabel);
     end
 
     zValue = str2double(parts{1});
@@ -1459,23 +1511,24 @@ end
 end
 
 function prefix = localBuildPrefix(latticeInfo, regionMode, primitiveType, pathMode, powerMode, powerConfig)
+displayUnit = localFieldOrDefault(latticeInfo, 'displayDistanceUnit', "um");
 switch latticeInfo.type
     case 'cartesian'
         latticeTag = sprintf('%dx%dx%d_cart_px_%s_py_%s_pz_%s', ...
             latticeInfo.counts(1), latticeInfo.counts(2), latticeInfo.counts(3), ...
-            localCompactNumber(latticeInfo.pitchXUm), ...
-            localCompactNumber(latticeInfo.pitchYUm), ...
-            localCompactNumber(latticeInfo.pitchZUm));
+            localCompactDistance(latticeInfo.pitchXUm, displayUnit), ...
+            localCompactDistance(latticeInfo.pitchYUm, displayUnit), ...
+            localCompactDistance(latticeInfo.pitchZUm, displayUnit));
     case 'hex'
         latticeTag = sprintf('%dx%dx%d_hex_pxy_%s_pz_%s', ...
             latticeInfo.counts(1), latticeInfo.counts(2), latticeInfo.counts(3), ...
-            localCompactNumber(latticeInfo.pitchXYUm), ...
-            localCompactNumber(latticeInfo.pitchZUm));
+            localCompactDistance(latticeInfo.pitchXYUm, displayUnit), ...
+            localCompactDistance(latticeInfo.pitchZUm, displayUnit));
     case 'hcp'
         latticeTag = sprintf('%dx%dx%d_hcp_pxy_%s_pz_%s', ...
             latticeInfo.counts(1), latticeInfo.counts(2), latticeInfo.counts(3), ...
-            localCompactNumber(latticeInfo.pitchXYUm), ...
-            localCompactNumber(latticeInfo.pitchZUm));
+            localCompactDistance(latticeInfo.pitchXYUm, displayUnit), ...
+            localCompactDistance(latticeInfo.pitchZUm, displayUnit));
     otherwise
         latticeTag = char(latticeInfo.type);
 end
@@ -1854,17 +1907,17 @@ end
 
 function prefix = localBuildStaircasePrefix( ...
     nDepths, nPowers, zStartUm, zStepUm, powerStart, powerEnd, ...
-    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm)
+    patchNx, patchNy, pitchXUm, pitchYUm, gapXUm, gapYUm, originXUm, originYUm, displayUnit)
 powerTag = localBuildStaircasePowerTag(nPowers, powerStart, powerEnd);
 prefix = sprintf([ ...
     'stair_nd_%d_np_%d_zstart_%s_dz_%s_%s_patch_%dx%d_', ...
     'px_%s_py_%s_gx_%s_gy_%s_ox_%s_oy_%s'], ...
     nDepths, nPowers, ...
-    localCompactNumber(zStartUm), localCompactNumber(zStepUm), powerTag, ...
+    localCompactDistance(zStartUm, displayUnit), localCompactDistance(zStepUm, displayUnit), powerTag, ...
     patchNx, patchNy, ...
-    localCompactNumber(pitchXUm), localCompactNumber(pitchYUm), ...
-    localCompactNumber(gapXUm), localCompactNumber(gapYUm), ...
-    localCompactNumber(originXUm), localCompactNumber(originYUm));
+    localCompactDistance(pitchXUm, displayUnit), localCompactDistance(pitchYUm, displayUnit), ...
+    localCompactDistance(gapXUm, displayUnit), localCompactDistance(gapYUm, displayUnit), ...
+    localCompactDistance(originXUm, displayUnit), localCompactDistance(originYUm, displayUnit));
 end
 
 function powerTag = localBuildStaircasePowerTag(nPowers, powerStart, powerEnd)
@@ -1879,7 +1932,7 @@ function prefix = localBuildSegmentedGratingPrefix( ...
     depthAxisName, periodAxisName, scanAxisName, nDepths, depthStartUm, depthStepUm, ...
     period1Um, nPeriods1, period2Um, nPeriods2, segmentGapUm, ...
     slabCopies1, slabPitch1Um, slabCopies2, slabPitch2Um, ...
-    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, powerConfig)
+    channelRows, channelCols, channelRowPitchUm, channelColPitchUm, originUm, powerMode, powerConfig, displayUnit)
 powerTag = '';
 if powerMode == "fixed_value"
     fixedValue = localFieldOrDefault(powerConfig, 'fixedValue', 10);
@@ -1891,19 +1944,19 @@ prefix = sprintf([ ...
     'seg1_%dx%s_slab_%d_pitch_%s_gap_%s_seg2_%dx%s_slab_%d_pitch_%s_', ...
     'ch_%dx%d_rp_%s_cp_%s_ox_%s_oy_%s_oz_%s%s'], ...
     lower(depthAxisName), lower(periodAxisName), lower(scanAxisName), ...
-    nDepths, localCompactNumber(depthStartUm), localCompactNumber(depthStepUm), ...
-    nPeriods1, localCompactNumber(period1Um), ...
-    slabCopies1, localCompactNumber(slabPitch1Um), ...
-    localCompactNumber(segmentGapUm), ...
-    nPeriods2, localCompactNumber(period2Um), ...
-    slabCopies2, localCompactNumber(slabPitch2Um), ...
+    nDepths, localCompactDistance(depthStartUm, displayUnit), localCompactDistance(depthStepUm, displayUnit), ...
+    nPeriods1, localCompactDistance(period1Um, displayUnit), ...
+    slabCopies1, localCompactDistance(slabPitch1Um, displayUnit), ...
+    localCompactDistance(segmentGapUm, displayUnit), ...
+    nPeriods2, localCompactDistance(period2Um, displayUnit), ...
+    slabCopies2, localCompactDistance(slabPitch2Um, displayUnit), ...
     channelRows, channelCols, ...
-    localCompactNumber(channelRowPitchUm), localCompactNumber(channelColPitchUm), ...
-    localCompactNumber(originUm(1)), localCompactNumber(originUm(2)), localCompactNumber(originUm(3)), ...
+    localCompactDistance(channelRowPitchUm, displayUnit), localCompactDistance(channelColPitchUm, displayUnit), ...
+    localCompactDistance(originUm(1), displayUnit), localCompactDistance(originUm(2), displayUnit), localCompactDistance(originUm(3), displayUnit), ...
     powerTag);
 end
 
-function prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, powerConfig)
+function prefix = localBuildZPushPrefix(originUm, moveXYUm, pushCount, pushStepUm, intervalSeconds, powerMode, powerConfig, displayUnit)
 powerTag = '';
 if powerMode == "fixed_value"
     fixedValue = localFieldOrDefault(powerConfig, 'fixedValue', 10);
@@ -1911,13 +1964,58 @@ if powerMode == "fixed_value"
 end
 
 prefix = sprintf('zpush_n_%d_dz_%s_wait_%s_ox_%s_oy_%s_oz_%s_dx_%s_dy_%s%s', ...
-    pushCount, localCompactNumber(pushStepUm), localCompactNumber(intervalSeconds), ...
-    localCompactNumber(originUm(1)), localCompactNumber(originUm(2)), localCompactNumber(originUm(3)), ...
-    localCompactNumber(moveXYUm(1)), localCompactNumber(moveXYUm(2)), powerTag);
+    pushCount, localCompactDistance(pushStepUm, displayUnit), localCompactNumber(intervalSeconds), ...
+    localCompactDistance(originUm(1), displayUnit), localCompactDistance(originUm(2), displayUnit), localCompactDistance(originUm(3), displayUnit), ...
+    localCompactDistance(moveXYUm(1), displayUnit), localCompactDistance(moveXYUm(2), displayUnit), powerTag);
 end
 
 function textValue = localCompactNumber(value)
 textValue = regexprep(num2str(value, '%.15g'), '\s+', '');
+end
+
+function textValue = localCompactDistance(valueUm, unit)
+textValue = localCompactNumber(localDisplayDistance(valueUm, unit));
+end
+
+function value = localDisplayDistance(valueUm, unit)
+unit = localCanonicalDistanceUnit(unit);
+if unit == "mm"
+    value = valueUm ./ 1000;
+else
+    value = valueUm;
+end
+end
+
+function unit = localDisplayDistanceUnit(config)
+unit = localCanonicalDistanceUnit(localNormalizeOption(localFieldOrDefault(config, 'displayDistanceUnit', 'um')));
+end
+
+function unit = localPowerDistanceUnit(powerConfig)
+unit = localCanonicalDistanceUnit(localNormalizeOption(localFieldOrDefault(powerConfig, 'distanceUnit', 'um')));
+end
+
+function unit = localCanonicalDistanceUnit(unit)
+unit = localNormalizeOption(unit);
+switch unit
+    case {"mm", "millimeter", "millimeters"}
+        unit = "mm";
+    case {"um", "micron", "microns", "micrometer", "micrometers"}
+        unit = "um";
+    otherwise
+        error('Distance unit must be "mm" or "um".');
+end
+end
+
+function textValue = localDistanceUnitText(unit)
+textValue = char(localCanonicalDistanceUnit(unit));
+end
+
+function label = localLinearPointZLabel(unit)
+if localCanonicalDistanceUnit(unit) == "mm"
+    label = 'z_mm';
+else
+    label = 'z_um';
+end
 end
 
 function textValue = localCompactCellTag(value)

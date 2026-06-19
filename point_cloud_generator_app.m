@@ -68,7 +68,7 @@ ui = struct();
 latticeGrid = latticeTabGrid;
 
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, 'Segmented Grating', @onLatticeTypeChanged, ...
+    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
     {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
@@ -80,33 +80,33 @@ ui.PointsYField = countFields(2);
 ui.PointsZField = countFields(3);
 
 [ui.CartesianPitchPanel, cartesianPitchFields] = createValuePanel( ...
-    latticeGrid, 'Pitch (um)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [2, 2, 10], tips.cartesianPitch);
+    latticeGrid, 'Pitch (mm)', {'Pitch X', 'Pitch Y', 'Pitch Z'}, [0.002, 0.002, 0.01], tips.cartesianPitch);
 ui.CartesianPitchPanel.Layout.Row = 3;
 ui.PitchXField = cartesianPitchFields(1);
 ui.PitchYField = cartesianPitchFields(2);
 ui.PitchZCartesianField = cartesianPitchFields(3);
 
 [ui.HexPitchPanel, hexPitchFields] = createValuePanel( ...
-    latticeGrid, 'Pitch (um)', {'Pitch XY', 'Pitch Z'}, [3, 75], tips.hexPitch);
+    latticeGrid, 'Pitch (mm)', {'Pitch XY', 'Pitch Z'}, [0.003, 0.075], tips.hexPitch);
 ui.HexPitchPanel.Layout.Row = 4;
 ui.PitchXYField = hexPitchFields(1);
 ui.PitchZHexField = hexPitchFields(2);
 
 [ui.OriginPanel, originFields] = createValuePanel( ...
-    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, -17.5], tips.origin);
+    latticeGrid, 'Origin (mm)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, -0.0175], tips.origin);
 ui.OriginPanel.Layout.Row = 5;
 ui.OriginXField = originFields(1);
 ui.OriginYField = originFields(2);
 ui.OriginZField = originFields(3);
 
 [ui.HcpShiftPanel, hcpShiftFields] = createValuePanel( ...
-    latticeGrid, 'AB Shift (um)', {'AB dx', 'AB dy'}, [1.5, (sqrt(3) / 6) * 3], tips.hcpShift);
+    latticeGrid, 'AB Shift (mm)', {'AB dx', 'AB dy'}, [0.0015, (sqrt(3) / 6) * 0.003], tips.hcpShift);
 ui.HcpShiftPanel.Layout.Row = 6;
 ui.AbDxField = hcpShiftFields(1);
 ui.AbDyField = hcpShiftFields(2);
 
 [ui.StepConfigPanel, stepConfigFields] = createValuePanel( ...
-    latticeGrid, 'Depth Steps', {'Depth Count', 'Z Start', 'Z Step'}, [5, 0, 50], tips.stepConfig);
+    latticeGrid, 'Depth Steps', {'Depth Count', 'Z Start (mm)', 'Z Step (mm)'}, [5, 0, 0.05], tips.stepConfig);
 ui.StepConfigPanel.Layout.Row = 7;
 ui.NDepthsField = stepConfigFields(1);
 ui.ZStartField = stepConfigFields(2);
@@ -127,19 +127,19 @@ ui.PatchNxField = patchCountFields(1);
 ui.PatchNyField = patchCountFields(2);
 
 [ui.PatchPitchPanel, patchPitchFields] = createValuePanel( ...
-    latticeGrid, 'Patch Pitch (um)', {'Pitch X', 'Pitch Y'}, [10, 10], tips.patchPitch);
+    latticeGrid, 'Patch Pitch (mm)', {'Pitch X', 'Pitch Y'}, [0.01, 0.01], tips.patchPitch);
 ui.PatchPitchPanel.Layout.Row = 10;
 ui.PatchPitchXField = patchPitchFields(1);
 ui.PatchPitchYField = patchPitchFields(2);
 
 [ui.GapPanel, gapFields] = createValuePanel( ...
-    latticeGrid, 'Gap (um)', {'Gap X', 'Gap Y'}, [20, 20], tips.gap);
+    latticeGrid, 'Gap (mm)', {'Gap X', 'Gap Y'}, [0.02, 0.02], tips.gap);
 ui.GapPanel.Layout.Row = 11;
 ui.GapXField = gapFields(1);
 ui.GapYField = gapFields(2);
 
 [ui.StaircaseOriginPanel, stairOriginFields] = createValuePanel( ...
-    latticeGrid, 'Origin (um)', {'Origin X', 'Origin Y'}, [0, 0], tips.staircaseOrigin);
+    latticeGrid, 'Origin (mm)', {'Origin X', 'Origin Y'}, [0, 0], tips.staircaseOrigin);
 ui.StaircaseOriginPanel.Layout.Row = 12;
 ui.StaircaseOriginXField = stairOriginFields(1);
 ui.StaircaseOriginYField = stairOriginFields(2);
@@ -152,7 +152,7 @@ ui.GratingDepthAxisDropDown = gratingAxisDropdowns(1);
 ui.GratingPeriodAxisDropDown = gratingAxisDropdowns(2);
 
 [ui.GratingDepthPanel, gratingDepthFields] = createValuePanel( ...
-    latticeGrid, 'Grating Depth', {'Layer Count', 'Start', 'Step'}, [1, 0, 10], tips.gratingDepth);
+    latticeGrid, 'Grating Depth', {'Layer Count', 'Start (mm)', 'Step (mm)'}, [1, 0, 0.01], tips.gratingDepth);
 ui.GratingDepthPanel.Layout.Row = 14;
 ui.GratingDepthCountField = gratingDepthFields(1);
 ui.GratingDepthStartField = gratingDepthFields(2);
@@ -160,32 +160,32 @@ ui.GratingDepthStepField = gratingDepthFields(3);
 ui.GratingDepthStepField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.GratingSegmentOnePanel, gratingSegmentOneFields] = createValuePanelWithSlots( ...
-    latticeGrid, 'Grating Segment 1', {'Period', 'Period Count'}, [17.53, 6], 3, tips.gratingSegmentOne);
+    latticeGrid, 'Grating Segment 1', {'Period (mm)', 'Period Count'}, [0.01753, 6], 3, tips.gratingSegmentOne);
 ui.GratingSegmentOnePanel.Layout.Row = 15;
 ui.GratingPeriod1Field = gratingSegmentOneFields(1);
 ui.GratingPeriodCount1Field = gratingSegmentOneFields(2);
 
 [ui.GratingSegmentTwoPanel, gratingSegmentTwoFields] = createValuePanelWithSlots( ...
-    latticeGrid, 'Grating Segment 2', {'Period', 'Period Count', 'Segment Gap'}, [9.65, 20, 4], 3, tips.gratingSegmentTwo);
+    latticeGrid, 'Grating Segment 2', {'Period (mm)', 'Period Count', 'Segment Gap (mm)'}, [0.00965, 20, 0.004], 3, tips.gratingSegmentTwo);
 ui.GratingSegmentTwoPanel.Layout.Row = 16;
 ui.GratingPeriod2Field = gratingSegmentTwoFields(1);
 ui.GratingPeriodCount2Field = gratingSegmentTwoFields(2);
 ui.GratingSegmentGapField = gratingSegmentTwoFields(3);
 
 [ui.GratingSlabOnePanel, gratingSlabOneFields] = createValuePanel( ...
-    latticeGrid, 'Slab Segment 1', {'Line Count', 'Line Pitch'}, [8, 1], tips.gratingSlabOne);
+    latticeGrid, 'Slab Segment 1', {'Line Count', 'Line Pitch (mm)'}, [8, 0.001], tips.gratingSlabOne);
 ui.GratingSlabOnePanel.Layout.Row = 17;
 ui.GratingSlabCopies1Field = gratingSlabOneFields(1);
 ui.GratingSlabPitch1Field = gratingSlabOneFields(2);
 
 [ui.GratingSlabTwoPanel, gratingSlabTwoFields] = createValuePanel( ...
-    latticeGrid, 'Slab Segment 2', {'Line Count', 'Line Pitch'}, [4, 1], tips.gratingSlabTwo);
+    latticeGrid, 'Slab Segment 2', {'Line Count', 'Line Pitch (mm)'}, [4, 0.001], tips.gratingSlabTwo);
 ui.GratingSlabTwoPanel.Layout.Row = 18;
 ui.GratingSlabCopies2Field = gratingSlabTwoFields(1);
 ui.GratingSlabPitch2Field = gratingSlabTwoFields(2);
 
 [ui.GratingChannelPanel, gratingChannelFields] = createValuePanelWithSlots( ...
-    latticeGrid, 'Channel Matrix', {'Rows', 'Columns', 'Row Pitch', 'Column Pitch'}, [5, 5, 8.7, 20], 4, tips.gratingChannel);
+    latticeGrid, 'Channel Matrix', {'Rows', 'Columns', 'Row Pitch (mm)', 'Column Pitch (mm)'}, [5, 5, 0.0087, 0.02], 4, tips.gratingChannel);
 ui.GratingChannelPanel.Layout.Row = 19;
 ui.GratingChannelRowsField = gratingChannelFields(1);
 ui.GratingChannelColsField = gratingChannelFields(2);
@@ -207,11 +207,11 @@ ui.GratingSegmentOneStartsLabel.Layout.Row = 1;
 ui.GratingSegmentOneStartsLabel.Layout.Column = 1;
 ui.GratingSegmentOneStartsTable = uitable(gratingStartsGrid, ...
     'Data', { ...
-    '8.7655', '8.7655', '', '0', '0'; ...
-    '8.7655', '0', '', '8.7655', '0'; ...
+    '0.0087655', '0.0087655', '', '0', '0'; ...
+    '0.0087655', '0', '', '0.0087655', '0'; ...
     '', '', '', '', ''; ...
-    '0', '8.7655', '', '0', '8.7655'; ...
-    '0', '0', '', '8.7655', '8.7655'}, ...
+    '0', '0.0087655', '', '0', '0.0087655'; ...
+    '0', '0', '', '0.0087655', '0.0087655'}, ...
     'ColumnName', {'C1', 'C2', 'C3', 'C4', 'C5'}, ...
     'RowName', {'R1', 'R2', 'R3', 'R4', 'R5'}, ...
     'ColumnEditable', true(1, 5), ...
@@ -224,11 +224,11 @@ ui.GratingSegmentTwoStartsLabel.Layout.Row = 3;
 ui.GratingSegmentTwoStartsLabel.Layout.Column = 1;
 ui.GratingSegmentTwoStartsTable = uitable(gratingStartsGrid, ...
     'Data', { ...
-    '', '114.8250', '114.8250', '114.8250', ''; ...
-    '110', '110', '110', '110', '110'; ...
-    '110', '114.8250', '', '114.8250', '110'; ...
-    '110', '110', '110', '110', '110'; ...
-    '', '114.8250', '114.8250', '114.8250', ''}, ...
+    '', '0.114825', '0.114825', '0.114825', ''; ...
+    '0.11', '0.11', '0.11', '0.11', '0.11'; ...
+    '0.11', '0.114825', '', '0.114825', '0.11'; ...
+    '0.11', '0.11', '0.11', '0.11', '0.11'; ...
+    '', '0.114825', '0.114825', '0.114825', ''}, ...
     'ColumnName', {'C1', 'C2', 'C3', 'C4', 'C5'}, ...
     'RowName', {'R1', 'R2', 'R3', 'R4', 'R5'}, ...
     'ColumnEditable', true(1, 5), ...
@@ -239,13 +239,13 @@ applyTooltip({ui.GratingChannelStartsPanel, ui.GratingSegmentOneStartsLabel, ui.
     ui.GratingSegmentTwoStartsLabel, ui.GratingSegmentTwoStartsTable}, tips.gratingChannelStarts);
 
 [ui.GratingScanPanel, gratingScanFields] = createValuePanel( ...
-    latticeGrid, 'Scan Line', {'Length'}, 20, tips.gratingScan);
+    latticeGrid, 'Scan Line', {'Length (mm)'}, 0.02, tips.gratingScan);
 ui.GratingScanPanel.Layout.Row = 21;
 ui.GratingScanLengthField = gratingScanFields(1);
 ui.GratingScanLengthField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.ZPushOriginPanel, zPushOriginFields] = createValuePanel( ...
-    latticeGrid, 'Initial Position (um)', {'X0', 'Y0', 'Z0'}, [0, 0, 0], tips.zPushOrigin);
+    latticeGrid, 'Initial Position (mm)', {'X0', 'Y0', 'Z0'}, [0, 0, 0], tips.zPushOrigin);
 ui.ZPushOriginPanel.Layout.Row = 22;
 ui.ZPushOriginXField = zPushOriginFields(1);
 ui.ZPushOriginYField = zPushOriginFields(2);
@@ -255,7 +255,7 @@ ui.ZPushOriginYField.ValueChangedFcn = @onStaircaseParamChanged;
 ui.ZPushOriginZField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.ZPushMovePanel, zPushMoveFields] = createValuePanel( ...
-    latticeGrid, 'XY Move (um)', {'dX', 'dY'}, [0, 0], tips.zPushMove);
+    latticeGrid, 'XY Move (mm)', {'dX', 'dY'}, [0, 0], tips.zPushMove);
 ui.ZPushMovePanel.Layout.Row = 23;
 ui.ZPushMoveXField = zPushMoveFields(1);
 ui.ZPushMoveYField = zPushMoveFields(2);
@@ -263,7 +263,7 @@ ui.ZPushMoveXField.ValueChangedFcn = @onStaircaseParamChanged;
 ui.ZPushMoveYField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.ZPushConfigPanel, zPushConfigFields] = createValuePanel( ...
-    latticeGrid, 'Z Push', {'Count', 'Step (um)', 'Interval s'}, [5, 10, 1], tips.zPushConfig);
+    latticeGrid, 'Z Push', {'Count', 'Step (mm)', 'Interval s'}, [5, 0.01, 1], tips.zPushConfig);
 ui.ZPushConfigPanel.Layout.Row = 24;
 ui.ZPushCountField = zPushConfigFields(1);
 ui.ZPushStepField = zPushConfigFields(2);
@@ -273,14 +273,14 @@ ui.ZPushStepField.ValueChangedFcn = @onStaircaseParamChanged;
 ui.ZPushIntervalField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.HexCutCenterPanel, hexCutCenterFields] = createValuePanel( ...
-    latticeGrid, 'Cut Center (um)', {'Center X', 'Center Y', 'Center Z'}, [0, 0, 0], tips.hexCutCenter);
+    latticeGrid, 'Cut Center (mm)', {'Center X', 'Center Y', 'Center Z'}, [0, 0, 0], tips.hexCutCenter);
 ui.HexCutCenterPanel.Layout.Row = 25;
 ui.HexCutCenterXField = hexCutCenterFields(1);
 ui.HexCutCenterYField = hexCutCenterFields(2);
 ui.HexCutCenterZField = hexCutCenterFields(3);
 
 [ui.HexCutGeometryPanel, hexCutGeometryFields] = createValuePanel( ...
-    latticeGrid, 'Hexagon Geometry', {'Side (um)', 'Rotation (deg)'}, [100, 0], tips.hexCutGeometry);
+    latticeGrid, 'Hexagon Geometry', {'Side (mm)', 'Rotation (deg)'}, [0.5, 0], tips.hexCutGeometry);
 ui.HexCutGeometryPanel.Layout.Row = 26;
 ui.HexCutSideLengthField = hexCutGeometryFields(1);
 ui.HexCutRotationField = hexCutGeometryFields(2);
@@ -292,7 +292,7 @@ ui.HexCutDirectionRow.Layout.Row = 27;
 
 [ui.HexCutMotionPanel, hexCutMotionFields] = createValuePanelWithSlots( ...
     latticeGrid, 'Cut Motion', {'Power (%)', 'Speed (mm/s)', 'Accel (mm/s^2)', 'Lead Safety', 'Exit Safety'}, ...
-    [10, 0.01, 1, 1.5, 1], 5, tips.hexCutMotion);
+    [100, 0.01, 1, 1.5, 1], 5, tips.hexCutMotion);
 ui.HexCutMotionPanel.Layout.Row = 28;
 ui.HexCutPowerField = hexCutMotionFields(1);
 ui.HexCutSpeedField = hexCutMotionFields(2);
@@ -301,8 +301,8 @@ ui.HexCutLeadSafetyField = hexCutMotionFields(4);
 ui.HexCutExitSafetyField = hexCutMotionFields(5);
 
 [ui.HexReleasePatternPanel, hexReleasePatternFields] = createValuePanelWithSlots( ...
-    latticeGrid, 'Release Pattern', {'Wall Margin', 'Rings', 'Ring Pitch', 'Hatch Pitch'}, ...
-    [15, 3, 10, 80], 4, tips.hexReleasePattern);
+    latticeGrid, 'Release Pattern', {'Wall Margin (mm)', 'Rings', 'Ring Pitch (mm)', 'Hatch Pitch (mm)'}, ...
+    [0.015, 10, 0.005, 0], 4, tips.hexReleasePattern);
 ui.HexReleasePatternPanel.Layout.Row = 29;
 ui.HexReleaseWallMarginField = hexReleasePatternFields(1);
 ui.HexReleaseRingCountField = hexReleasePatternFields(2);
@@ -310,14 +310,16 @@ ui.HexReleaseRingPitchField = hexReleasePatternFields(3);
 ui.HexReleaseHatchPitchField = hexReleasePatternFields(4);
 
 [ui.HexReleaseZPanel, hexReleaseZFields] = createValuePanel( ...
-    latticeGrid, 'Release Z Stack', {'Layers', 'Z Step'}, [1, 0], tips.hexReleaseZ);
+    latticeGrid, 'Release Z Stack', {'Layers', 'Z Step (mm)', 'Repeats'}, [1, 0, 1], tips.hexReleaseZ);
 ui.HexReleaseZPanel.Layout.Row = 30;
 ui.HexReleaseLayerCountField = hexReleaseZFields(1);
 ui.HexReleaseZStepField = hexReleaseZFields(2);
+ui.HexReleaseRepeatCountField = hexReleaseZFields(3);
+ui.HexReleaseRepeatCountField.ValueChangedFcn = @onStaircaseParamChanged;
 
 [ui.HexReleaseMotionPanel, hexReleaseMotionFields] = createValuePanelWithSlots( ...
     latticeGrid, 'Release Motion', {'Ring P (%)', 'Ring Speed', 'Hatch P (%)', 'Hatch Speed'}, ...
-    [10, 0.01, 10, 0.01], 4, tips.hexReleaseMotion);
+    [100, 0.01, 10, 0.01], 4, tips.hexReleaseMotion);
 ui.HexReleaseMotionPanel.Layout.Row = 31;
 ui.HexReleaseRingPowerField = hexReleaseMotionFields(1);
 ui.HexReleaseRingSpeedField = hexReleaseMotionFields(2);
@@ -375,10 +377,10 @@ ui.PowerModeRow.Layout.Row = 1;
 [ui.FixedPowerRow, ui.FixedPowerField] = createNumericRow(powerGrid, 'Fixed Power', 10, tips.fixedPower);
 ui.FixedPowerRow.Layout.Row = 2;
 
-[ui.PowerFormulaRow, ui.PowerFormulaField] = createTextRow(powerGrid, 'Formula', '1+0.005*z', tips.powerFormula);
+[ui.PowerFormulaRow, ui.PowerFormulaField] = createTextRow(powerGrid, 'Formula', '1+5*z', tips.powerFormula);
 ui.PowerFormulaRow.Layout.Row = 3;
 
-ui.PowerPointsPanel = uipanel(powerGrid, 'Title', 'Linear Points (z_um, power)');
+ui.PowerPointsPanel = uipanel(powerGrid, 'Title', 'Linear Points (z_mm, power)');
 ui.PowerPointsPanel.Layout.Row = 4;
 ui.PowerPointsPanel.Layout.Column = 1;
 
@@ -386,7 +388,7 @@ powerPointsGrid = uigridlayout(ui.PowerPointsPanel, [1, 1]);
 powerPointsGrid.Padding = [5, 5, 5, 5];
 
 ui.PowerPointsArea = uitextarea(powerPointsGrid, ...
-    'Value', {'0, 10'; '30, 20'});
+    'Value', {'0, 10'; '0.03, 20'});
 ui.PowerPointsArea.Layout.Row = 1;
 ui.PowerPointsArea.Layout.Column = 1;
 applyTooltip({ui.PowerPointsPanel, ui.PowerPointsArea}, tips.powerPointsArea);
@@ -449,7 +451,7 @@ ui.ScanDirectionRow.Layout.Row = 4;
     {'Center on point', 'Start at point'}, tips.scanAnchor);
 ui.ScanAnchorRow.Layout.Row = 5;
 
-[ui.ScanLengthRow, ui.ScanLengthField] = createNumericRow(planGrid, 'Length (um)', 10, tips.scanLength);
+[ui.ScanLengthRow, ui.ScanLengthField] = createNumericRow(planGrid, 'Length (mm)', 0.01, tips.scanLength);
 ui.ScanLengthRow.Layout.Row = 6;
 ui.ScanLengthField.ValueChangedFcn = @onPlanParamChanged;
 
@@ -471,7 +473,7 @@ actionGrid.RowSpacing = 5;
 actionGrid.Padding = [0, 0, 0, 0];
 
 ui.ImportHintLabel = uilabel(actionGrid, ...
-    'Text', 'Saved files include headers: mode, x/y/z, x2/y2/z2, power, dwell_s, scan_speed_mm_s, pause_s (pre-write pause).', ...
+    'Text', 'Saved files include headers: mode, x_mm/y_mm/z_mm, x2_mm/y2_mm/z2_mm, power, dwell_s, scan_speed_mm_s, pause_s (pre-write pause).', ...
     'WordWrap', 'on');
 ui.ImportHintLabel.Layout.Row = 1;
 ui.ImportHintLabel.Layout.Column = 1;
@@ -611,10 +613,10 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isCutMode);
         setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isCutMode);
         if isHexReleaseArray
-            ui.HexCutCenterPanel.Title = 'Array Center (um)';
+            ui.HexCutCenterPanel.Title = 'Array Center (mm)';
             syncHexArraySelectionTable();
         else
-            ui.HexCutCenterPanel.Title = 'Cut Center (um)';
+            ui.HexCutCenterPanel.Title = 'Cut Center (mm)';
         end
         setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isHexReleaseMode);
         setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isHexReleaseMode);
@@ -650,9 +652,9 @@ applyCompactFonts(fig);
             case "Fixed value"
                 ui.PowerHintLabel.Text = 'All points will use the same P value.';
             case "Custom formula"
-                ui.PowerHintLabel.Text = 'Enter a MATLAB expression using x, y, z in um.';
+                ui.PowerHintLabel.Text = 'Enter a MATLAB expression using x, y, z in mm.';
             case "Linear points"
-                ui.PowerHintLabel.Text = 'Enter one "z_um, power" pair per line. The app will linearly interpolate between them.';
+                ui.PowerHintLabel.Text = 'Enter one "z_mm, power" pair per line. The app will linearly interpolate between them.';
         end
     end
 
@@ -978,62 +980,63 @@ applyCompactFonts(fig);
         params = struct();
         params.lattice = struct();
         params.lattice.type = latticeType;
+        params.lattice.displayDistanceUnit = 'mm';
 
         if latticeType == "Staircase"
             params.lattice.nDepths = round(max(1, ui.NDepthsField.Value));
-            params.lattice.zStartUm = ui.ZStartField.Value;
-            params.lattice.zStepUm = ui.ZStepField.Value;
+            params.lattice.zStartUm = mmToUm(ui.ZStartField.Value);
+            params.lattice.zStepUm = mmToUm(ui.ZStepField.Value);
             params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
             params.lattice.powerStart = ui.StaircasePowerStartField.Value;
             params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
             params.lattice.patchNx = round(max(1, ui.PatchNxField.Value));
             params.lattice.patchNy = round(max(1, ui.PatchNyField.Value));
-            params.lattice.patchPitchXUm = ui.PatchPitchXField.Value;
-            params.lattice.patchPitchYUm = ui.PatchPitchYField.Value;
-            params.lattice.gapXUm = ui.GapXField.Value;
-            params.lattice.gapYUm = ui.GapYField.Value;
-            params.lattice.originXUm = ui.StaircaseOriginXField.Value;
-            params.lattice.originYUm = ui.StaircaseOriginYField.Value;
+            params.lattice.patchPitchXUm = mmToUm(ui.PatchPitchXField.Value);
+            params.lattice.patchPitchYUm = mmToUm(ui.PatchPitchYField.Value);
+            params.lattice.gapXUm = mmToUm(ui.GapXField.Value);
+            params.lattice.gapYUm = mmToUm(ui.GapYField.Value);
+            params.lattice.originXUm = mmToUm(ui.StaircaseOriginXField.Value);
+            params.lattice.originYUm = mmToUm(ui.StaircaseOriginYField.Value);
         elseif latticeType == "Segmented Grating"
-            params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
+            params.lattice.originUm = mmToUm([ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value]);
             params.lattice.depthAxis = string(ui.GratingDepthAxisDropDown.Value);
             params.lattice.periodAxis = string(ui.GratingPeriodAxisDropDown.Value);
             params.lattice.nDepths = round(max(1, ui.GratingDepthCountField.Value));
-            params.lattice.depthStartUm = ui.GratingDepthStartField.Value;
-            params.lattice.depthStepUm = ui.GratingDepthStepField.Value;
-            params.lattice.period1Um = ui.GratingPeriod1Field.Value;
+            params.lattice.depthStartUm = mmToUm(ui.GratingDepthStartField.Value);
+            params.lattice.depthStepUm = mmToUm(ui.GratingDepthStepField.Value);
+            params.lattice.period1Um = mmToUm(ui.GratingPeriod1Field.Value);
             params.lattice.nPeriods1 = round(max(1, ui.GratingPeriodCount1Field.Value));
-            params.lattice.period2Um = ui.GratingPeriod2Field.Value;
+            params.lattice.period2Um = mmToUm(ui.GratingPeriod2Field.Value);
             params.lattice.nPeriods2 = round(max(1, ui.GratingPeriodCount2Field.Value));
-            params.lattice.segmentGapUm = ui.GratingSegmentGapField.Value;
+            params.lattice.segmentGapUm = mmToUm(ui.GratingSegmentGapField.Value);
             params.lattice.slabCopies1 = round(max(1, ui.GratingSlabCopies1Field.Value));
-            params.lattice.slabPitch1Um = ui.GratingSlabPitch1Field.Value;
+            params.lattice.slabPitch1Um = mmToUm(ui.GratingSlabPitch1Field.Value);
             params.lattice.slabCopies2 = round(max(1, ui.GratingSlabCopies2Field.Value));
-            params.lattice.slabPitch2Um = ui.GratingSlabPitch2Field.Value;
+            params.lattice.slabPitch2Um = mmToUm(ui.GratingSlabPitch2Field.Value);
             syncGratingChannelStartsTable();
             params.lattice.channelRows = round(max(1, ui.GratingChannelRowsField.Value));
             params.lattice.channelCols = round(max(1, ui.GratingChannelColsField.Value));
-            params.lattice.channelRowPitchUm = ui.GratingChannelRowPitchField.Value;
-            params.lattice.channelColPitchUm = ui.GratingChannelColPitchField.Value;
+            params.lattice.channelRowPitchUm = mmToUm(ui.GratingChannelRowPitchField.Value);
+            params.lattice.channelColPitchUm = mmToUm(ui.GratingChannelColPitchField.Value);
             params.lattice.channelStartsExplicit = true;
             params.lattice.channelStartsUm = gratingChannelStartTablesToRows( ...
                 ui.GratingSegmentOneStartsTable.Data, ui.GratingSegmentTwoStartsTable.Data, ...
                 params.lattice.channelRows, params.lattice.channelCols);
         elseif latticeType == "Z Push"
-            params.lattice.originUm = [ ...
+            params.lattice.originUm = mmToUm([ ...
                 ui.ZPushOriginXField.Value, ...
                 ui.ZPushOriginYField.Value, ...
-                ui.ZPushOriginZField.Value];
-            params.lattice.moveXYUm = [ui.ZPushMoveXField.Value, ui.ZPushMoveYField.Value];
+                ui.ZPushOriginZField.Value]);
+            params.lattice.moveXYUm = mmToUm([ui.ZPushMoveXField.Value, ui.ZPushMoveYField.Value]);
             params.lattice.pushCount = round(max(1, ui.ZPushCountField.Value));
-            params.lattice.pushStepUm = ui.ZPushStepField.Value;
+            params.lattice.pushStepUm = mmToUm(ui.ZPushStepField.Value);
             params.lattice.intervalSeconds = ui.ZPushIntervalField.Value;
         elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
-            params.lattice.centerUm = [ ...
+            params.lattice.centerUm = mmToUm([ ...
                 ui.HexCutCenterXField.Value, ...
                 ui.HexCutCenterYField.Value, ...
-                ui.HexCutCenterZField.Value];
-            params.lattice.sideLengthUm = ui.HexCutSideLengthField.Value;
+                ui.HexCutCenterZField.Value]);
+            params.lattice.sideLengthUm = mmToUm(ui.HexCutSideLengthField.Value);
             params.lattice.rotationDeg = ui.HexCutRotationField.Value;
             params.lattice.direction = string(ui.HexCutDirectionDropDown.Value);
             params.lattice.powerPercent = ui.HexCutPowerField.Value;
@@ -1042,12 +1045,13 @@ applyCompactFonts(fig);
             params.lattice.leadSafetyFactor = ui.HexCutLeadSafetyField.Value;
             params.lattice.exitSafetyFactor = ui.HexCutExitSafetyField.Value;
             if latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
-                params.lattice.releaseWallMarginUm = ui.HexReleaseWallMarginField.Value;
+                params.lattice.releaseWallMarginUm = mmToUm(ui.HexReleaseWallMarginField.Value);
                 params.lattice.releaseRingCount = round(max(1, ui.HexReleaseRingCountField.Value));
-                params.lattice.releaseRingPitchUm = ui.HexReleaseRingPitchField.Value;
-                params.lattice.releaseHatchPitchUm = ui.HexReleaseHatchPitchField.Value;
+                params.lattice.releaseRingPitchUm = mmToUm(ui.HexReleaseRingPitchField.Value);
+                params.lattice.releaseHatchPitchUm = mmToUm(ui.HexReleaseHatchPitchField.Value);
                 params.lattice.releaseLayerCount = round(max(1, ui.HexReleaseLayerCountField.Value));
-                params.lattice.releaseZStepUm = ui.HexReleaseZStepField.Value;
+                params.lattice.releaseZStepUm = mmToUm(ui.HexReleaseZStepField.Value);
+                params.lattice.releaseRepeatCount = round(max(1, ui.HexReleaseRepeatCountField.Value));
                 params.lattice.releaseRingPowerPercent = ui.HexReleaseRingPowerField.Value;
                 params.lattice.releaseRingSpeedMmPerSecond = ui.HexReleaseRingSpeedField.Value;
                 params.lattice.releaseHatchPowerPercent = ui.HexReleaseHatchPowerField.Value;
@@ -1062,20 +1066,20 @@ applyCompactFonts(fig);
             end
         else
             params.lattice.counts = [ui.PointsXField.Value, ui.PointsYField.Value, ui.PointsZField.Value];
-            params.lattice.originUm = [ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value];
+            params.lattice.originUm = mmToUm([ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value]);
             params.lattice.hcpShift = struct( ...
-                'dxUm', ui.AbDxField.Value, ...
-                'dyUm', ui.AbDyField.Value);
+                'dxUm', mmToUm(ui.AbDxField.Value), ...
+                'dyUm', mmToUm(ui.AbDyField.Value));
 
             if latticeType == "Cartesian"
                 params.lattice.pitch = struct( ...
-                    'xUm', ui.PitchXField.Value, ...
-                    'yUm', ui.PitchYField.Value, ...
-                    'zUm', ui.PitchZCartesianField.Value);
+                    'xUm', mmToUm(ui.PitchXField.Value), ...
+                    'yUm', mmToUm(ui.PitchYField.Value), ...
+                    'zUm', mmToUm(ui.PitchZCartesianField.Value));
             else
                 params.lattice.pitch = struct( ...
-                    'xyUm', ui.PitchXYField.Value, ...
-                    'zUm', ui.PitchZHexField.Value);
+                    'xyUm', mmToUm(ui.PitchXYField.Value), ...
+                    'zUm', mmToUm(ui.PitchZHexField.Value));
             end
         end
 
@@ -1088,6 +1092,7 @@ applyCompactFonts(fig);
         params.power.fixedValue = ui.FixedPowerField.Value;
         params.power.formula = string(ui.PowerFormulaField.Value);
         params.power.linearPointsText = strjoin(string(ui.PowerPointsArea.Value), newline);
+        params.power.distanceUnit = 'mm';
     end
 
     function rows = gratingChannelStartTablesToRows(segmentOneData, segmentTwoData, channelRows, channelCols)
@@ -1097,7 +1102,7 @@ applyCompactFonts(fig);
             for iCol = 1:channelCols
                 segmentOneStart = gratingStartTableValue(segmentOneData, iRow, iCol, 'First Grating');
                 segmentTwoStart = gratingStartTableValue(segmentTwoData, iRow, iCol, 'Second Grating');
-                rows(end + 1, :) = [iRow, iCol, segmentOneStart, segmentTwoStart]; %#ok<AGROW>
+                rows(end + 1, :) = [iRow, iCol, mmToUm(segmentOneStart), mmToUm(segmentTwoStart)]; %#ok<AGROW>
             end
         end
     end
@@ -1132,7 +1137,7 @@ applyCompactFonts(fig);
                 return;
             end
             if ~isfinite(value)
-                error('%s start-position table R%d/C%d must be a finite number, or blank to skip writing.', tableName, iRow, iCol);
+                error('%s start-position table R%d/C%d must be a finite distance in mm, or blank to skip writing.', tableName, iRow, iCol);
             end
             return;
         end
@@ -1159,7 +1164,7 @@ applyCompactFonts(fig);
             end
             error('%s start-position table R%d/C%d must be numeric, blank, or N to skip writing.', tableName, iRow, iCol);
         elseif ~isfinite(value)
-            error('%s start-position table R%d/C%d must be a finite number, or blank to skip writing.', tableName, iRow, iCol);
+                error('%s start-position table R%d/C%d must be a finite distance in mm, or blank to skip writing.', tableName, iRow, iCol);
         end
     end
 
@@ -1193,9 +1198,9 @@ applyCompactFonts(fig);
         planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
         planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
         if isGrating
-            planConfig.scanLengthUm = validatePositiveScalar(ui.GratingScanLengthField.Value, 'Grating scan length');
+            planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.GratingScanLengthField.Value, 'Grating scan length'));
         else
-            planConfig.scanLengthUm = validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length');
+            planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length'));
         end
         planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
         planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
@@ -1297,16 +1302,16 @@ applyCompactFonts(fig);
         latticeType = string(ui.LatticeTypeDropDown.Value);
         if latticeType == "Z Push"
             nPush = round(max(1, ui.ZPushCountField.Value));
-            zStepUm = ui.ZPushStepField.Value;
+            zStepMm = ui.ZPushStepField.Value;
             intervalSeconds = ui.ZPushIntervalField.Value;
-            finalDepthUm = nPush * zStepUm;
-            if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm) && zStepUm > 0)
+            finalDepthMm = nPush * zStepMm;
+            if ~(isscalar(zStepMm) && isnumeric(zStepMm) && isfinite(zStepMm) && zStepMm > 0)
                 detailText = 'Z Push requires a push step greater than 0.';
             elseif ~(isscalar(intervalSeconds) && isnumeric(intervalSeconds) && isfinite(intervalSeconds) && intervalSeconds >= 0)
                 detailText = 'Z Push requires a nonnegative interval time.';
             else
-                detailText = sprintf('Apply the XY offset first, then push toward -Z (deeper) starting at Z0 - %.4g um for %d steps, reaching Z0 - %.4g um, waiting %.4g s each time.', ...
-                    zStepUm, nPush, finalDepthUm, intervalSeconds);
+                detailText = sprintf('Apply the XY offset first, then push toward -Z (deeper) starting at Z0 - %.4g mm for %d steps, reaching Z0 - %.4g mm, waiting %.4g s each time.', ...
+                    zStepMm, nPush, finalDepthMm, intervalSeconds);
             end
             ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
             return;
@@ -1342,23 +1347,24 @@ applyCompactFonts(fig);
                 if isReleaseCut
                     ringCount = round(max(1, ui.HexReleaseRingCountField.Value));
                     layerCount = round(max(1, ui.HexReleaseLayerCountField.Value));
+                    repeatCount = round(max(1, ui.HexReleaseRepeatCountField.Value));
                     releaseOrder = string(ui.HexReleaseOrderDropDown.Value);
                     speeds = [speed, ringSpeed, hatchSpeed];
-                    baseLeadUm = (speeds .^ 2 ./ (2 * acceleration)) * 1000;
-                    leadInUm = baseLeadUm * leadSafety;
-                    leadOutUm = baseLeadUm * exitSafety;
+                    baseLeadMm = speeds .^ 2 ./ (2 * acceleration);
+                    leadInMm = baseLeadMm * leadSafety;
+                    leadOutMm = baseLeadMm * exitSafety;
                     if releaseOrder == "Outside-in"
                         orderText = sprintf('starts with the final outer wall, then %d outline ring(s) inward, then internal 3-direction hatch lines', ringCount);
                     else
                         orderText = sprintf('starts with internal 3-direction hatch lines, then %d outline ring(s) from inside to the final outer wall', ringCount);
                     end
-                    detailText = sprintf(['Each Z layer %s; %d layer(s) total. ', ...
-                        'Lead-in range %.4g-%.4g um, lead-out range %.4g-%.4g um.'], ...
-                        orderText, layerCount, min(leadInUm), max(leadInUm), min(leadOutUm), max(leadOutUm));
+                    detailText = sprintf(['Each Z layer %s; %d layer(s), plan repeated %d time(s). ', ...
+                        'Lead-in range %.4g-%.4g mm, lead-out range %.4g-%.4g mm.'], ...
+                        orderText, layerCount, repeatCount, min(leadInMm), max(leadInMm), min(leadOutMm), max(leadOutMm));
                 else
-                    baseLeadUm = (speed ^ 2 / (2 * acceleration)) * 1000;
-                    detailText = sprintf('Each edge starts %.4g um before the cut start, exposes during the edge, then exits %.4g um after the cut end.', ...
-                        baseLeadUm * leadSafety, baseLeadUm * exitSafety);
+                    baseLeadMm = speed ^ 2 / (2 * acceleration);
+                    detailText = sprintf('Each edge starts %.4g mm before the cut start, exposes during the edge, then exits %.4g mm after the cut end.', ...
+                        baseLeadMm * leadSafety, baseLeadMm * exitSafety);
                 end
             end
             if isReleaseArray
@@ -1376,10 +1382,10 @@ applyCompactFonts(fig);
         end
 
         if latticeType == "Staircase"
-            zStepUm = ui.ZStepField.Value;
-            if ~(isscalar(zStepUm) && isnumeric(zStepUm) && isfinite(zStepUm))
+            zStepMm = ui.ZStepField.Value;
+            if ~(isscalar(zStepMm) && isnumeric(zStepMm) && isfinite(zStepMm))
                 detailText = 'Staircase mode requires a finite non-zero Z Step.';
-            elseif zStepUm ~= 0
+            elseif zStepMm ~= 0
                 detailText = 'Deep to shallow (ascending Z; smaller Z is deeper).';
             else
                 detailText = 'Staircase mode requires a non-zero Z Step.';
@@ -1389,20 +1395,20 @@ applyCompactFonts(fig);
             return;
         end
 
-        depthStepUm = ui.GratingDepthStepField.Value;
+        depthStepMm = ui.GratingDepthStepField.Value;
         depthAxis = string(ui.GratingDepthAxisDropDown.Value);
         periodAxis = string(ui.GratingPeriodAxisDropDown.Value);
         if depthAxis == periodAxis
             detailText = 'Grating depth axis and period axis cannot be the same.';
-        elseif ~(isscalar(depthStepUm) && isnumeric(depthStepUm) && isfinite(depthStepUm))
+        elseif ~(isscalar(depthStepMm) && isnumeric(depthStepMm) && isfinite(depthStepMm))
             detailText = 'Grating requires a finite non-zero depth step.';
-        elseif depthStepUm == 0
+        elseif depthStepMm == 0
             detailText = 'Grating requires a non-zero depth step.';
         elseif depthAxis == "Z"
             detailText = 'Deep to shallow (ascending Z; smaller Z is deeper).';
-        elseif depthStepUm > 0
+        elseif depthStepMm > 0
             detailText = sprintf('Increasing along %s.', depthAxis);
-        elseif depthStepUm < 0
+        elseif depthStepMm < 0
             detailText = sprintf('Decreasing along %s.', depthAxis);
         else
             detailText = 'Grating requires a non-zero depth step.';
@@ -1410,6 +1416,10 @@ applyCompactFonts(fig);
 
         ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Within each layer, write the channel matrix row by row and column by column; each channel writes segment 1 before segment 2, and the scan axis is inferred from the remaining coordinate axis.'];
     end
+end
+
+function valueUm = mmToUm(valueMm)
+valueUm = valueMm .* 1000;
 end
 
 function names = writingPlanColumnNames()
@@ -1851,23 +1861,23 @@ tips.counts = { ...
     'Number of generated points along Y; must be a positive integer.', ...
     'Number of generated layers or points along Z; must be a positive integer.'};
 tips.cartesianPitch = { ...
-    'Spacing between adjacent points along X, in um.', ...
-    'Spacing between adjacent points along Y, in um.', ...
-    'Spacing between adjacent Z layers, in um.'};
+    'Spacing between adjacent points along X, in mm.', ...
+    'Spacing between adjacent points along Y, in mm.', ...
+    'Spacing between adjacent Z layers, in mm.'};
 tips.hexPitch = { ...
-    'Neighbor spacing for Hex/HCP lattices in the XY plane, in um.', ...
-    'Spacing between adjacent Z layers for Hex/HCP lattices, in um.'};
+    'Neighbor spacing for Hex/HCP lattices in the XY plane, in mm.', ...
+    'Spacing between adjacent Z layers for Hex/HCP lattices, in mm.'};
 tips.origin = { ...
-    'Overall lattice X origin or offset, in um.', ...
-    'Overall lattice Y origin or offset, in um.', ...
-    'Overall lattice Z origin or offset, in um.'};
+    'Overall lattice X origin or offset, in mm.', ...
+    'Overall lattice Y origin or offset, in mm.', ...
+    'Overall lattice Z origin or offset, in mm.'};
 tips.hcpShift = { ...
-    'X offset of HCP B layers relative to A layers, in um.', ...
-    'Y offset of HCP B layers relative to A layers, in um.'};
+    'X offset of HCP B layers relative to A layers, in mm.', ...
+    'Y offset of HCP B layers relative to A layers, in mm.'};
 tips.stepConfig = { ...
     'Number of depth layers in Staircase mode.', ...
-    'Z coordinate of the first Staircase layer, in um.', ...
-    'Z step between adjacent depth layers, in um; smaller Z is deeper.'};
+    'Z coordinate of the first Staircase layer, in mm.', ...
+    'Z step between adjacent depth layers, in mm; smaller Z is deeper.'};
 tips.powerColumns = { ...
     'Number of power columns in Staircase mode.', ...
     'Power value used by the first Staircase column.', ...
@@ -1876,62 +1886,62 @@ tips.patchCounts = { ...
     'Number of points along X in each Staircase patch.', ...
     'Number of points along Y in each Staircase patch.'};
 tips.patchPitch = { ...
-    'X spacing inside each Staircase patch, in um.', ...
-    'Y spacing inside each Staircase patch, in um.'};
+    'X spacing inside each Staircase patch, in mm.', ...
+    'Y spacing inside each Staircase patch, in mm.'};
 tips.gap = { ...
-    'Blank X gap between adjacent Staircase patches, in um.', ...
-    'Blank Y gap between adjacent Staircase patches, in um.'};
+    'Blank X gap between adjacent Staircase patches, in mm.', ...
+    'Blank Y gap between adjacent Staircase patches, in mm.'};
 tips.staircaseOrigin = { ...
-    'Overall Staircase array X origin or offset, in um.', ...
-    'Overall Staircase array Y origin or offset, in um.'};
+    'Overall Staircase array X origin or offset, in mm.', ...
+    'Overall Staircase array Y origin or offset, in mm.'};
 tips.gratingAxes = { ...
     'Depth direction for the segmented grating; depth layers are emitted from start and step.', ...
     'Period direction for the 1D QPM pattern; the scan direction automatically uses the remaining coordinate axis.'};
 tips.gratingDepth = { ...
     'Number of depth layers in the segmented grating.', ...
-    'Depth-axis coordinate of the first layer relative to the origin, in um.', ...
-    'Depth-axis step between adjacent layers, in um; for Z depth, smaller Z is deeper.'};
+    'Depth-axis coordinate of the first layer relative to the origin, in mm.', ...
+    'Depth-axis step between adjacent layers, in mm; for Z depth, smaller Z is deeper.'};
 tips.gratingSegmentOne = { ...
-    'Period of segment 1 in the 1D QPM pattern, in um.', ...
+    'Period of segment 1 in the 1D QPM pattern, in mm.', ...
     'Number of periods in segment 1.'};
 tips.gratingSegmentTwo = { ...
-    'Period of segment 2 in the 1D QPM pattern, in um.', ...
+    'Period of segment 2 in the 1D QPM pattern, in mm.', ...
     'Number of periods in segment 2.', ...
-    'Gap from the last segment 1 period position to the start of segment 2 along the period axis, in um; defaults to the segment 1 period.'};
+    'Gap from the last segment 1 period position to the start of segment 2 along the period axis, in mm; defaults to the segment 1 period.'};
 tips.gratingSlabOne = { ...
     'Number of adjacent scan lines written at each segment 1 period position to form a thicker slab.', ...
-    'Spacing along the period axis between adjacent scan lines in the same segment 1 slab, in um.'};
+    'Spacing along the period axis between adjacent scan lines in the same segment 1 slab, in mm.'};
 tips.gratingSlabTwo = { ...
     'Number of adjacent scan lines written at each segment 2 period position to form a thicker slab.', ...
-    'Spacing along the period axis between adjacent scan lines in the same segment 2 slab, in um.'};
+    'Spacing along the period axis between adjacent scan lines in the same segment 2 slab, in mm.'};
 tips.gratingChannel = { ...
     'Rows in the segmented grating channel matrix; channels are written row by row and column by column for each depth layer.', ...
     'Columns in the segmented grating channel matrix; channels are written row by row and column by column for each depth layer.', ...
-    'Origin offset between adjacent channel rows, defaulting to the depth axis, in um; sign controls direction.', ...
-    'Origin offset between adjacent channel columns, defaulting to the scan axis, in um; sign controls direction.'};
+    'Origin offset between adjacent channel rows, defaulting to the depth axis, in mm; sign controls direction.', ...
+    'Origin offset between adjacent channel columns, defaulting to the scan axis, in mm; sign controls direction.'};
 tips.gratingChannelStarts = [ ...
     'Table cells map to channel positions: R1/C1 is row 1 column 1, R2/C1 is row 2 column 1;', ...
-    'The first table gives segment 1 grating start positions, and the second table gives segment 2 start positions, in um;', ...
+    'The first table gives segment 1 grating start positions, and the second table gives segment 2 start positions, in mm;', ...
     'Enter only one number per cell; blank or N skips that segment for that channel.'];
 tips.gratingScan = { ...
-    'Length of each segmented grating slab scan line, in um.'};
+    'Length of each segmented grating slab scan line, in mm.'};
 tips.zPushOrigin = { ...
-    'Reference X coordinate before push starts, in um.', ...
-    'Reference Y coordinate before push starts, in um.', ...
-    'Surface or initial Z coordinate, in um; the first step writes at Z0 - step.'};
+    'Reference X coordinate before push starts, in mm.', ...
+    'Reference Y coordinate before push starts, in mm.', ...
+    'Surface or initial Z coordinate, in mm; the first step writes at Z0 - step.'};
 tips.zPushMove = { ...
-    'X offset from the initial X coordinate, in um.', ...
-    'Y offset from the initial Y coordinate, in um.'};
+    'X offset from the initial X coordinate, in mm.', ...
+    'Y offset from the initial Y coordinate, in mm.'};
 tips.zPushConfig = { ...
     'Number of pushes along -Z; must be a positive integer.', ...
-    'Distance for each -Z push, in um; for example, 10 means 10 um per step.', ...
+    'Distance for each -Z push, in mm; for example, 0.01 means 0.01 mm per step.', ...
     'Wait time after each push reaches position; written to pause_s, in seconds.'};
 tips.hexCutCenter = { ...
-    'Center X coordinate of the hexagon, in um.', ...
-    'Center Y coordinate of the hexagon, in um.', ...
-    'Fixed Z coordinate of the hexagon cut plane, in um.'};
+    'Center X coordinate of the hexagon, in mm.', ...
+    'Center Y coordinate of the hexagon, in mm.', ...
+    'Fixed Z coordinate of the hexagon cut plane, in mm.'};
 tips.hexCutGeometry = { ...
-    'Side length of the regular hexagon, in um.', ...
+    'Side length of the regular hexagon, in mm.', ...
     'Rotation angle of the first vertex around the center, in degrees.'};
 tips.hexCutDirection = 'Order used to cut the six hexagon edges.';
 tips.hexCutMotion = { ...
@@ -1941,13 +1951,14 @@ tips.hexCutMotion = { ...
     'Multiplier applied to v^2/(2a) for the lead-in distance before each cut start.', ...
     'Multiplier applied to v^2/(2a) for the laser-off lead-out distance after each cut end.'};
 tips.hexReleasePattern = { ...
-    'Distance from internal hatch endpoints to the final hexagon wall, in um.', ...
+    'Distance from internal hatch endpoints to the final hexagon wall, in mm.', ...
     'Number of concentric hexagon outline rings; the final ring is the requested hole boundary.', ...
-    'Inward offset spacing between concentric outline rings, in um.', ...
-    'Spacing between internal 3-direction hatch lines, in um; set to 0 to disable hatch.'};
+    'Inward offset spacing between concentric outline rings, in mm.', ...
+    'Spacing between internal 3-direction hatch lines, in mm; set to 0 to disable hatch.'};
 tips.hexReleaseZ = { ...
     'Number of repeated release-cut Z layers.', ...
-    'Z offset between release layers, in um; sign controls whether layers move deeper or shallower.'};
+    'Z offset between release layers, in mm; sign controls whether layers move deeper or shallower.', ...
+    'Number of times to repeat the complete generated release plan; 1 keeps the original plan.'};
 tips.hexReleaseMotion = { ...
     'Laser power used for concentric release rings inside the final hexagon wall.', ...
     'Stage speed used for concentric release rings, in mm/s.', ...
@@ -1962,15 +1973,15 @@ tips.hexArraySelection = ['Checked cells are cut with the same Hexagon Release C
     'The array is centered on the Center X/Y/Z values; columns are staggered to form a close-packed honeycomb.'];
 tips.powerMode = 'Choose how the power column is generated for each point: fixed value, formula, or linear interpolation by Z depth.';
 tips.fixedPower = 'Single power value used for all points in fixed-power mode.';
-tips.powerFormula = 'Custom power formula; x, y, and z variables are in um.';
-tips.powerPointsArea = 'Enter one "z_um, power" pair per line. The app linearly interpolates power by Z depth.';
+tips.powerFormula = 'Custom power formula; x, y, and z variables are in mm.';
+tips.powerPointsArea = 'Enter one "z_mm, power" pair per line. The app linearly interpolates power by Z depth.';
 tips.pathMode = 'Controls writing order within the same Z layer: row-major uses the same direction per row; serpentine reverses adjacent rows to reduce travel.';
 tips.exposureMode = 'Choose the exposure mode for the writing plan: point dwell opens the shutter at each point; axis scan moves from a start point to an end point.';
 tips.dwellSeconds = 'Exposure time for each point in point-dwell mode, in seconds.';
 tips.scanAxis = 'Coordinate axis used for axis scans.';
 tips.scanDirection = 'Axis scans move from the start point in the positive or negative coordinate direction; positive Z corresponds to deep-to-shallow.';
 tips.scanAnchor = 'Centered on point means the scan segment is centered on the source point; start at point means the source point is the scan start.';
-tips.scanLength = 'Length of each axis scan, in um.';
+tips.scanLength = 'Length of each axis scan, in mm.';
 tips.scanSpeed = 'Stage speed during axis scans, in mm/s.';
 tips.pauseSeconds = 'Settling time after the stage reaches a point or scan start before exposure or scanning, in seconds.';
 tips.previewRows = 'Maximum number of plan rows shown in the table; saving still writes every row.';
