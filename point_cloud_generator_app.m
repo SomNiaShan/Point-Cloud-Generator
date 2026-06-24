@@ -67,9 +67,11 @@ ui = struct();
 
 latticeGrid = latticeTabGrid;
 
+latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', ...
+    'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array', 'Circle Release Cut'};
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
-    {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', 'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array'}, tips.latticeType);
+    latticeGrid, 'Lattice Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
+    latticeTypeItems, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
@@ -285,6 +287,13 @@ ui.HexCutGeometryPanel.Layout.Row = 26;
 ui.HexCutSideLengthField = hexCutGeometryFields(1);
 ui.HexCutRotationField = hexCutGeometryFields(2);
 
+[ui.CircleCutGeometryPanel, circleCutGeometryFields] = createValuePanel( ...
+    latticeGrid, 'Circle Geometry', {'Radius (mm)', 'Start Angle (deg)', 'Segments'}, [0.5, 0, 128], tips.circleCutGeometry);
+ui.CircleCutGeometryPanel.Layout.Row = 26;
+ui.CircleCutRadiusField = circleCutGeometryFields(1);
+ui.CircleCutStartAngleField = circleCutGeometryFields(2);
+ui.CircleCutSegmentCountField = circleCutGeometryFields(3);
+
 [ui.HexCutDirectionRow, ui.HexCutDirectionDropDown] = createDropdownRow( ...
     latticeGrid, 'Cut Direction', {'Counter-clockwise', 'Clockwise'}, 'Counter-clockwise', @onStaircaseParamChanged, ...
     {'Counter-clockwise', 'Clockwise'}, tips.hexCutDirection);
@@ -473,7 +482,7 @@ actionGrid.RowSpacing = 5;
 actionGrid.Padding = [0, 0, 0, 0];
 
 ui.ImportHintLabel = uilabel(actionGrid, ...
-    'Text', 'Saved files include headers: mode, x_mm/y_mm/z_mm, x2_mm/y2_mm/z2_mm, power, dwell_s, scan_speed_mm_s, pause_s (pre-write pause).', ...
+    'Text', 'Saved files include headers: mode, start/end XYZ, power, dwell, speed, pause, lead/exit, and cut group columns.', ...
     'WordWrap', 'on');
 ui.ImportHintLabel.Layout.Row = 1;
 ui.ImportHintLabel.Layout.Column = 1;
@@ -559,7 +568,7 @@ ui.SummaryLabel.Layout.Column = 1;
 ui.DataTable = uitable(previewGrid, ...
     'ColumnName', writingPlanColumnNames(), ...
     'ColumnEditable', false(1, numel(writingPlanColumnNames())), ...
-    'ColumnWidth', {70, 80, 80, 80, 80, 80, 80, 70, 72, 125, 72, 90, 90, 90, 90, 90, 90, 120}, ...
+    'ColumnWidth', repmat({90}, 1, numel(writingPlanColumnNames())), ...
     'RowName', []);
 ui.DataTable.Layout.Row = 3;
 ui.DataTable.Layout.Column = 1;
@@ -578,8 +587,11 @@ applyCompactFonts(fig);
         isHexCut = latticeType == "Hexagon Cut";
         isHexReleaseCut = latticeType == "Hexagon Release Cut";
         isHexReleaseArray = latticeType == "Hexagon Release Cut Array";
+        isCircleReleaseCut = latticeType == "Circle Release Cut";
         isHexReleaseMode = isHexReleaseCut || isHexReleaseArray;
-        isCutMode = isHexCut || isHexReleaseMode;
+        isReleaseMode = isHexReleaseMode || isCircleReleaseCut;
+        isCutMode = isHexCut || isReleaseMode;
+        showHexGeometry = isHexCut || isHexReleaseMode;
         isFixedOrder = isStaircase || isGrating || isZPush || isCutMode;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
@@ -609,19 +621,35 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 23, ui.ZPushMovePanel, 'fit', isZPush);
         setPanelRow(latticeGrid, 24, ui.ZPushConfigPanel, 'fit', isZPush);
         setPanelRow(latticeGrid, 25, ui.HexCutCenterPanel, 'fit', isCutMode);
-        setPanelRow(latticeGrid, 26, ui.HexCutGeometryPanel, 'fit', isCutMode);
+        if showHexGeometry
+            ui.HexCutGeometryPanel.Visible = 'on';
+        else
+            ui.HexCutGeometryPanel.Visible = 'off';
+        end
+        if isCircleReleaseCut
+            ui.CircleCutGeometryPanel.Visible = 'on';
+        else
+            ui.CircleCutGeometryPanel.Visible = 'off';
+        end
+        if showHexGeometry || isCircleReleaseCut
+            latticeGrid.RowHeight{26} = 'fit';
+        else
+            latticeGrid.RowHeight{26} = 0;
+        end
         setPanelRow(latticeGrid, 27, ui.HexCutDirectionRow, 'fit', isCutMode);
         setPanelRow(latticeGrid, 28, ui.HexCutMotionPanel, 'fit', isCutMode);
         if isHexReleaseArray
             ui.HexCutCenterPanel.Title = 'Array Center (mm)';
             syncHexArraySelectionTable();
+        elseif isCircleReleaseCut
+            ui.HexCutCenterPanel.Title = 'Circle Center (mm)';
         else
             ui.HexCutCenterPanel.Title = 'Cut Center (mm)';
         end
-        setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isHexReleaseMode);
-        setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isHexReleaseMode);
-        setPanelRow(latticeGrid, 31, ui.HexReleaseMotionPanel, 'fit', isHexReleaseMode);
-        setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isHexReleaseMode);
+        setPanelRow(latticeGrid, 29, ui.HexReleasePatternPanel, 'fit', isReleaseMode);
+        setPanelRow(latticeGrid, 30, ui.HexReleaseZPanel, 'fit', isReleaseMode);
+        setPanelRow(latticeGrid, 31, ui.HexReleaseMotionPanel, 'fit', isReleaseMode);
+        setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isReleaseMode);
         setPanelRow(latticeGrid, 33, ui.HexArraySizePanel, 'fit', isHexReleaseArray);
         setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
 
@@ -1031,20 +1059,28 @@ applyCompactFonts(fig);
             params.lattice.pushCount = round(max(1, ui.ZPushCountField.Value));
             params.lattice.pushStepUm = mmToUm(ui.ZPushStepField.Value);
             params.lattice.intervalSeconds = ui.ZPushIntervalField.Value;
-        elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
+        elseif latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || ...
+                latticeType == "Hexagon Release Cut Array" || latticeType == "Circle Release Cut"
             params.lattice.centerUm = mmToUm([ ...
                 ui.HexCutCenterXField.Value, ...
                 ui.HexCutCenterYField.Value, ...
                 ui.HexCutCenterZField.Value]);
-            params.lattice.sideLengthUm = mmToUm(ui.HexCutSideLengthField.Value);
-            params.lattice.rotationDeg = ui.HexCutRotationField.Value;
+            if latticeType == "Circle Release Cut"
+                params.lattice.radiusUm = mmToUm(ui.CircleCutRadiusField.Value);
+                params.lattice.startAngleDeg = ui.CircleCutStartAngleField.Value;
+                params.lattice.segmentCount = round(max(8, ui.CircleCutSegmentCountField.Value));
+            else
+                params.lattice.sideLengthUm = mmToUm(ui.HexCutSideLengthField.Value);
+                params.lattice.rotationDeg = ui.HexCutRotationField.Value;
+            end
             params.lattice.direction = string(ui.HexCutDirectionDropDown.Value);
             params.lattice.powerPercent = ui.HexCutPowerField.Value;
             params.lattice.cutSpeedMmPerSecond = ui.HexCutSpeedField.Value;
             params.lattice.accelerationMmPerSecondSquared = ui.HexCutAccelerationField.Value;
             params.lattice.leadSafetyFactor = ui.HexCutLeadSafetyField.Value;
             params.lattice.exitSafetyFactor = ui.HexCutExitSafetyField.Value;
-            if latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
+            if latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array" || ...
+                    latticeType == "Circle Release Cut"
                 params.lattice.releaseWallMarginUm = mmToUm(ui.HexReleaseWallMarginField.Value);
                 params.lattice.releaseRingCount = round(max(1, ui.HexReleaseRingCountField.Value));
                 params.lattice.releaseRingPitchUm = mmToUm(ui.HexReleaseRingPitchField.Value);
@@ -1190,7 +1226,8 @@ applyCompactFonts(fig);
         isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
         isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
         isHexReleaseArray = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut Array";
-        isCutMode = isHexCut || isHexReleaseCut || isHexReleaseArray;
+        isCircleReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Circle Release Cut";
+        isCutMode = isHexCut || isHexReleaseCut || isHexReleaseArray || isCircleReleaseCut;
         planConfig = struct();
         planConfig.mode = normalizePlanOption(ui.ExposureModeDropDown.Value);
         planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
@@ -1317,12 +1354,14 @@ applyCompactFonts(fig);
             return;
         end
 
-        if latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array"
+        if latticeType == "Hexagon Cut" || latticeType == "Hexagon Release Cut" || ...
+                latticeType == "Hexagon Release Cut Array" || latticeType == "Circle Release Cut"
             speed = ui.HexCutSpeedField.Value;
             acceleration = ui.HexCutAccelerationField.Value;
             leadSafety = ui.HexCutLeadSafetyField.Value;
             exitSafety = ui.HexCutExitSafetyField.Value;
-            isReleaseCut = latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array";
+            isCircleReleaseCut = latticeType == "Circle Release Cut";
+            isReleaseCut = latticeType == "Hexagon Release Cut" || latticeType == "Hexagon Release Cut Array" || isCircleReleaseCut;
             isReleaseArray = latticeType == "Hexagon Release Cut Array";
             if isReleaseCut
                 ringSpeed = ui.HexReleaseRingSpeedField.Value;
@@ -1332,17 +1371,17 @@ applyCompactFonts(fig);
                 hatchSpeed = speed;
             end
             if ~(isscalar(speed) && isnumeric(speed) && isfinite(speed) && speed > 0)
-                detailText = 'Hexagon cut requires a finite positive cut speed.';
+                detailText = 'Cut mode requires a finite positive cut speed.';
             elseif isReleaseCut && ~(isscalar(ringSpeed) && isnumeric(ringSpeed) && isfinite(ringSpeed) && ringSpeed > 0)
-                detailText = 'Hexagon release cut requires a finite positive ring speed.';
+                detailText = 'Release cut requires a finite positive ring speed.';
             elseif isReleaseCut && ~(isscalar(hatchSpeed) && isnumeric(hatchSpeed) && isfinite(hatchSpeed) && hatchSpeed > 0)
-                detailText = 'Hexagon release cut requires a finite positive hatch speed.';
+                detailText = 'Release cut requires a finite positive hatch speed.';
             elseif ~(isscalar(acceleration) && isnumeric(acceleration) && isfinite(acceleration) && acceleration > 0)
-                detailText = 'Hexagon cut requires a finite positive acceleration.';
+                detailText = 'Cut mode requires a finite positive acceleration.';
             elseif ~(isscalar(leadSafety) && isnumeric(leadSafety) && isfinite(leadSafety) && leadSafety > 0)
-                detailText = 'Hexagon cut requires a finite positive lead safety factor.';
+                detailText = 'Cut mode requires a finite positive lead safety factor.';
             elseif ~(isscalar(exitSafety) && isnumeric(exitSafety) && isfinite(exitSafety) && exitSafety >= 0)
-                detailText = 'Hexagon cut requires a finite nonnegative exit safety factor.';
+                detailText = 'Cut mode requires a finite nonnegative exit safety factor.';
             else
                 if isReleaseCut
                     ringCount = round(max(1, ui.HexReleaseRingCountField.Value));
@@ -1353,10 +1392,16 @@ applyCompactFonts(fig);
                     baseLeadMm = speeds .^ 2 ./ (2 * acceleration);
                     leadInMm = baseLeadMm * leadSafety;
                     leadOutMm = baseLeadMm * exitSafety;
+                    ringText = 'outline ring(s)';
+                    hatchText = 'internal 3-direction hatch lines';
+                    if isCircleReleaseCut
+                        ringText = 'circular ring group(s)';
+                        hatchText = 'internal 3-direction hatch chords';
+                    end
                     if releaseOrder == "Outside-in"
-                        orderText = sprintf('starts with the final outer wall, then %d outline ring(s) inward, then internal 3-direction hatch lines', ringCount);
+                        orderText = sprintf('starts with the final outer wall, then %d %s inward, then %s', ringCount, ringText, hatchText);
                     else
-                        orderText = sprintf('starts with internal 3-direction hatch lines, then %d outline ring(s) from inside to the final outer wall', ringCount);
+                        orderText = sprintf('starts with %s, then %d %s from inside to the final outer wall', hatchText, ringCount, ringText);
                     end
                     detailText = sprintf(['Each Z layer %s; %d layer(s), plan repeated %d time(s). ', ...
                         'Lead-in range %.4g-%.4g mm, lead-out range %.4g-%.4g mm.'], ...
@@ -1426,7 +1471,8 @@ function names = writingPlanColumnNames()
 names = {'mode', 'x_mm', 'y_mm', 'z_mm', 'x2_mm', 'y2_mm', 'z2_mm', ...
     'power', 'dwell_s', 'scan_speed_mm_s', 'pause_s', ...
     'lead_x_mm', 'lead_y_mm', 'lead_z_mm', ...
-    'exit_x_mm', 'exit_y_mm', 'exit_z_mm', 'lead_speed_mm_s'};
+    'exit_x_mm', 'exit_y_mm', 'exit_z_mm', 'lead_speed_mm_s', ...
+    'cut_group_id', 'cut_group_segment'};
 end
 
 function names = writingPlanBaseColumnNames()
@@ -1499,6 +1545,7 @@ exitX = numericOptionalColumn(rawTable, 'exit_x_mm', n);
 exitY = numericOptionalColumn(rawTable, 'exit_y_mm', n);
 exitZ = numericOptionalColumn(rawTable, 'exit_z_mm', n);
 leadSpeed = numericOptionalColumn(rawTable, 'lead_speed_mm_s', n);
+[cutGroupId, cutGroupSegment] = optionalCutGroupColumns(rawTable, mode);
 
 if any(~isfinite(x) | ~isfinite(y) | ~isfinite(z))
     error('x_mm, y_mm, and z_mm columns must all be finite numbers.');
@@ -1546,7 +1593,7 @@ if any(isfinite(pauseSeconds) & pauseSeconds < 0)
 end
 
 planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
-    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, ...
+    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, cutGroupId, cutGroupSegment, ...
     'VariableNames', expectedNames);
 
 if height(planTable) ~= n
@@ -1559,7 +1606,8 @@ modes = lower(strtrim(string(value)));
 modes = regexprep(modes, '[\s-]+', '_');
 modes(modes == "axis_scan") = "scan";
 modes(modes == "point_dwell") = "point";
-modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut" | modes == "hexagon_release_cut_array") = "cut";
+modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut" | ...
+    modes == "hexagon_release_cut_array" | modes == "circle_release_cut") = "cut";
 if any(~ismember(modes, ["point", "scan", "cut"]))
     error('The mode column only supports point, scan, or cut.');
 end
@@ -1588,6 +1636,51 @@ if any(strcmp(rawTable.Properties.VariableNames, columnName))
     values = numericColumn(rawTable.(columnName), columnName);
 else
     values = nan(rowCount, 1);
+end
+end
+
+function [groupId, groupSegment] = optionalCutGroupColumns(rawTable, mode)
+rowCount = height(rawTable);
+cutMask = mode == "cut";
+hasGroupId = any(strcmp(rawTable.Properties.VariableNames, 'cut_group_id'));
+hasGroupSegment = any(strcmp(rawTable.Properties.VariableNames, 'cut_group_segment'));
+if hasGroupSegment && ~hasGroupId
+    error('Writing plan file has cut_group_segment but is missing cut_group_id.');
+end
+
+groupId = nan(rowCount, 1);
+groupSegment = nan(rowCount, 1);
+if ~hasGroupId
+    cutIndices = find(cutMask);
+    groupId(cutIndices) = (1:numel(cutIndices)).';
+    groupSegment(cutIndices) = 1;
+    return;
+end
+
+groupId = numericOptionalColumn(rawTable, 'cut_group_id', rowCount);
+if any(cutMask & (~isfinite(groupId) | groupId < 1 | abs(groupId - round(groupId)) > 1e-9))
+    error('cut_group_id values must be positive integers on cut rows.');
+end
+groupId(cutMask) = round(groupId(cutMask));
+
+if hasGroupSegment
+    groupSegment = numericOptionalColumn(rawTable, 'cut_group_segment', rowCount);
+    if any(cutMask & (~isfinite(groupSegment) | groupSegment < 1 | abs(groupSegment - round(groupSegment)) > 1e-9))
+        error('cut_group_segment values must be positive integers on cut rows.');
+    end
+    groupSegment(cutMask) = round(groupSegment(cutMask));
+else
+    groupSegment = autoCutGroupSegments(groupId, cutMask);
+end
+end
+
+function segments = autoCutGroupSegments(groupId, cutMask)
+segments = nan(numel(groupId), 1);
+for iRow = 1:numel(groupId)
+    if ~cutMask(iRow)
+        continue;
+    end
+    segments(iRow) = nnz(cutMask(1:iRow) & (groupId(1:iRow) == groupId(iRow)));
 end
 end
 
@@ -1637,6 +1730,8 @@ exitX = nan(n, 1);
 exitY = nan(n, 1);
 exitZ = nan(n, 1);
 leadSpeed = nan(n, 1);
+cutGroupId = nan(n, 1);
+cutGroupSegment = nan(n, 1);
 
 switch planConfig.mode
     case "point_dwell"
@@ -1707,6 +1802,15 @@ switch planConfig.mode
         else
             pauseSeconds = zeros(n, 1);
         end
+        if size(data, 2) >= 18
+            cutGroupId = data(:, 17);
+            cutGroupSegment = data(:, 18);
+        elseif size(data, 2) == 17
+            error('Cut-scan data must include both cut group id and cut group segment columns, or neither.');
+        else
+            cutGroupId = (1:n).';
+            cutGroupSegment = ones(n, 1);
+        end
         if any(~isfinite([x2; y2; z2; leadX; leadY; leadZ; exitX; exitY; exitZ]))
             error('Cut-scan coordinates must all be finite.');
         end
@@ -1716,6 +1820,12 @@ switch planConfig.mode
         if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
             error('Cut-scan pause values must be finite nonnegative values.');
         end
+        if any(~isfinite(cutGroupId) | cutGroupId < 1 | abs(cutGroupId - round(cutGroupId)) > 1e-9 | ...
+                ~isfinite(cutGroupSegment) | cutGroupSegment < 1 | abs(cutGroupSegment - round(cutGroupSegment)) > 1e-9)
+            error('Cut group columns must contain positive integers.');
+        end
+        cutGroupId = round(cutGroupId);
+        cutGroupSegment = round(cutGroupSegment);
 
     otherwise
         error('Unsupported exposure mode: "%s".', planConfig.mode);
@@ -1730,7 +1840,7 @@ if planConfig.mode ~= "cut_scan" && size(data, 2) >= 5
 end
 
 planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
-    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, ...
+    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, cutGroupId, cutGroupSegment, ...
     'VariableNames', writingPlanColumnNames());
 
 if ~isfield(planConfig, 'preserveOrder') || ~planConfig.preserveOrder
@@ -1794,9 +1904,13 @@ end
 
 cutMask = string(planTable.mode) == "cut";
 if any(cutMask)
-    xValues = [xValues; planTable.x2_mm(cutMask); planTable.lead_x_mm(cutMask); planTable.exit_x_mm(cutMask)];
-    yValues = [yValues; planTable.y2_mm(cutMask); planTable.lead_y_mm(cutMask); planTable.exit_y_mm(cutMask)];
-    zValues = [zValues; planTable.z2_mm(cutMask); planTable.lead_z_mm(cutMask); planTable.exit_z_mm(cutMask)];
+    cutTable = planTable(cutMask, :);
+    groups = cutTableGroups(cutTable);
+    leadRows = groups(:, 1);
+    exitRows = groups(:, 2);
+    xValues = [xValues; cutTable.x2_mm; cutTable.lead_x_mm(leadRows); cutTable.exit_x_mm(exitRows)];
+    yValues = [yValues; cutTable.y2_mm; cutTable.lead_y_mm(leadRows); cutTable.exit_y_mm(exitRows)];
+    zValues = [zValues; cutTable.z2_mm; cutTable.lead_z_mm(leadRows); cutTable.exit_z_mm(exitRows)];
 end
 
 xValues = xValues(isfinite(xValues));
@@ -1825,21 +1939,33 @@ end
 function drawCutPreviewLines(ax, cutTable)
 leadColor = [0.45, 0.45, 0.45];
 cutColor = [0.9, 0.12, 0.08];
-
-leadX = [cutTable.lead_x_mm.'; cutTable.x_mm.'; nan(1, height(cutTable))];
-leadY = [cutTable.lead_y_mm.'; cutTable.y_mm.'; nan(1, height(cutTable))];
-leadZ = [cutTable.lead_z_mm.'; cutTable.z_mm.'; nan(1, height(cutTable))];
-plot3(ax, leadX(:), leadY(:), leadZ(:), '--', 'Color', leadColor, 'LineWidth', 0.9);
-
-cutX = [cutTable.x_mm.'; cutTable.x2_mm.'; nan(1, height(cutTable))];
-cutY = [cutTable.y_mm.'; cutTable.y2_mm.'; nan(1, height(cutTable))];
-cutZ = [cutTable.z_mm.'; cutTable.z2_mm.'; nan(1, height(cutTable))];
-plot3(ax, cutX(:), cutY(:), cutZ(:), '-', 'Color', cutColor, 'LineWidth', 1.5);
-
-exitX = [cutTable.x2_mm.'; cutTable.exit_x_mm.'; nan(1, height(cutTable))];
-exitY = [cutTable.y2_mm.'; cutTable.exit_y_mm.'; nan(1, height(cutTable))];
-exitZ = [cutTable.z2_mm.'; cutTable.exit_z_mm.'; nan(1, height(cutTable))];
-plot3(ax, exitX(:), exitY(:), exitZ(:), ':', 'Color', leadColor, 'LineWidth', 1.0);
+groups = cutTableGroups(cutTable);
+leadX = [];
+leadY = [];
+leadZ = [];
+cutX = [];
+cutY = [];
+cutZ = [];
+exitX = [];
+exitY = [];
+exitZ = [];
+for iGroup = 1:size(groups, 1)
+    firstRow = groups(iGroup, 1);
+    lastRow = groups(iGroup, 2);
+    rows = firstRow:lastRow;
+    leadX = [leadX; cutTable.lead_x_mm(firstRow); cutTable.x_mm(firstRow); nan]; %#ok<AGROW>
+    leadY = [leadY; cutTable.lead_y_mm(firstRow); cutTable.y_mm(firstRow); nan]; %#ok<AGROW>
+    leadZ = [leadZ; cutTable.lead_z_mm(firstRow); cutTable.z_mm(firstRow); nan]; %#ok<AGROW>
+    cutX = [cutX; cutTable.x_mm(firstRow); cutTable.x2_mm(rows); nan]; %#ok<AGROW>
+    cutY = [cutY; cutTable.y_mm(firstRow); cutTable.y2_mm(rows); nan]; %#ok<AGROW>
+    cutZ = [cutZ; cutTable.z_mm(firstRow); cutTable.z2_mm(rows); nan]; %#ok<AGROW>
+    exitX = [exitX; cutTable.x2_mm(lastRow); cutTable.exit_x_mm(lastRow); nan]; %#ok<AGROW>
+    exitY = [exitY; cutTable.y2_mm(lastRow); cutTable.exit_y_mm(lastRow); nan]; %#ok<AGROW>
+    exitZ = [exitZ; cutTable.z2_mm(lastRow); cutTable.exit_z_mm(lastRow); nan]; %#ok<AGROW>
+end
+plot3(ax, leadX, leadY, leadZ, '--', 'Color', leadColor, 'LineWidth', 0.9);
+plot3(ax, cutX, cutY, cutZ, '-', 'Color', cutColor, 'LineWidth', 1.5);
+plot3(ax, exitX, exitY, exitZ, ':', 'Color', leadColor, 'LineWidth', 1.0);
 
 arrowLimit = min(height(cutTable), 2000);
 if arrowLimit == 0
@@ -1853,9 +1979,26 @@ quiver3(ax, cutTable.x_mm(arrowIdx), cutTable.y_mm(arrowIdx), cutTable.z_mm(arro
     u, v, w, 0, 'Color', cutColor, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
 end
 
+function groups = cutTableGroups(cutTable)
+if isempty(cutTable) || height(cutTable) == 0
+    groups = zeros(0, 2);
+    return;
+end
+
+if any(strcmp(cutTable.Properties.VariableNames, 'cut_group_id')) && all(isfinite(cutTable.cut_group_id))
+    groupIds = cutTable.cut_group_id(:);
+else
+    groupIds = (1:height(cutTable)).';
+end
+
+groupStarts = [1; find(groupIds(2:end) ~= groupIds(1:end - 1)) + 1];
+groupEnds = [groupStarts(2:end) - 1; height(cutTable)];
+groups = [groupStarts, groupEnds];
+end
+
 function tips = parameterTooltips()
 tips = struct();
-tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds internal hatch and concentric release rings; Hexagon Release Cut Array repeats that cut on selected honeycomb cells.';
+tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds hatch and concentric release rings; Hexagon Release Cut Array repeats that cut on selected honeycomb cells; Circle Release Cut creates grouped continuous circular rings.';
 tips.counts = { ...
     'Number of generated points along X; must be a positive integer.', ...
     'Number of generated points along Y; must be a positive integer.', ...
@@ -1943,6 +2086,10 @@ tips.hexCutCenter = { ...
 tips.hexCutGeometry = { ...
     'Side length of the regular hexagon, in mm.', ...
     'Rotation angle of the first vertex around the center, in degrees.'};
+tips.circleCutGeometry = { ...
+    'Radius of the final circular wall, in mm.', ...
+    'Angle of the first polygon vertex around the center, in degrees.', ...
+    'Number of straight segments used to approximate each circular ring; larger values are smoother but create more rows.'};
 tips.hexCutDirection = 'Order used to cut the six hexagon edges.';
 tips.hexCutMotion = { ...
     'Laser power used during each exposed edge; in Hexagon Release Cut this is the final outer wall power.', ...
@@ -1951,8 +2098,8 @@ tips.hexCutMotion = { ...
     'Multiplier applied to v^2/(2a) for the lead-in distance before each cut start.', ...
     'Multiplier applied to v^2/(2a) for the laser-off lead-out distance after each cut end.'};
 tips.hexReleasePattern = { ...
-    'Distance from internal hatch endpoints to the final hexagon wall, in mm.', ...
-    'Number of concentric hexagon outline rings; the final ring is the requested hole boundary.', ...
+    'Distance from internal hatch endpoints to the final wall, in mm.', ...
+    'Number of concentric release outline rings; the final ring is the requested hole boundary.', ...
     'Inward offset spacing between concentric outline rings, in mm.', ...
     'Spacing between internal 3-direction hatch lines, in mm; set to 0 to disable hatch.'};
 tips.hexReleaseZ = { ...

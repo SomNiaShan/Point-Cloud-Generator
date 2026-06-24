@@ -34,6 +34,10 @@ if latticeTypeStr == "hexagon_release_cut_array"
     [data, prefix, summary] = localGenerateHexagonReleaseCutArrayFull(lattice);
     return;
 end
+if latticeTypeStr == "circle_release_cut"
+    [data, prefix, summary] = localGenerateCircleReleaseCutFull(lattice);
+    return;
+end
 
 region = localRequireStruct(params, 'region');
 power = localRequireStruct(params, 'power');
@@ -944,6 +948,215 @@ summary.arrayCenterUm = arrayCenterUm;
 summary.releaseRepeatCount = repeatCount;
 end
 
+function [data, prefix, summary] = localGenerateCircleReleaseCutFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
+centerUm = localVector3(localRequireField(lattice, 'centerUm'), 'Circle center');
+radiusUm = localPositiveScalar(localRequireField(lattice, 'radiusUm'), 'Circle radius');
+startAngleDeg = localFiniteScalar(localFieldOrDefault(lattice, 'startAngleDeg', 0), 'Circle start angle');
+segmentCount = localPositiveInteger(localFieldOrDefault(lattice, 'segmentCount', 128), 'Circle segments');
+if segmentCount < 8
+    error('Circle segments must be at least 8.');
+end
+direction = localNormalizeOption(localFieldOrDefault(lattice, 'direction', 'counter_clockwise'));
+if ~any(direction == ["counter_clockwise", "clockwise"])
+    error('Circle release cut direction must be Counter-clockwise or Clockwise.');
+end
+
+powerPercent = localNonnegativeScalar(localRequireField(lattice, 'powerPercent'), 'Cut power');
+cutSpeedMmPerSecond = localPositiveScalar(localRequireField(lattice, 'cutSpeedMmPerSecond'), 'Cut speed');
+accelerationMmPerSecondSquared = localPositiveScalar( ...
+    localRequireField(lattice, 'accelerationMmPerSecondSquared'), 'Acceleration');
+leadSafetyFactor = localPositiveScalar(localFieldOrDefault(lattice, 'leadSafetyFactor', 1.5), 'Lead safety factor');
+exitSafetyFactor = localNonnegativeScalar(localFieldOrDefault(lattice, 'exitSafetyFactor', 1), 'Exit safety factor');
+ringPowerPercent = localNonnegativeScalar( ...
+    localFieldOrDefault(lattice, 'releaseRingPowerPercent', powerPercent), 'Release ring power');
+ringSpeedMmPerSecond = localPositiveScalar( ...
+    localFieldOrDefault(lattice, 'releaseRingSpeedMmPerSecond', cutSpeedMmPerSecond), 'Release ring speed');
+hatchPowerPercent = localNonnegativeScalar( ...
+    localFieldOrDefault(lattice, 'releaseHatchPowerPercent', ringPowerPercent), 'Release hatch power');
+hatchSpeedMmPerSecond = localPositiveScalar( ...
+    localFieldOrDefault(lattice, 'releaseHatchSpeedMmPerSecond', ringSpeedMmPerSecond), 'Release hatch speed');
+
+wallMarginUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseWallMarginUm', 15), 'Release wall margin');
+ringCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseRingCount', 3), 'Release ring count');
+ringPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseRingPitchUm', 10), 'Release ring pitch');
+hatchPitchUm = localNonnegativeScalar(localFieldOrDefault(lattice, 'releaseHatchPitchUm', 80), 'Release hatch pitch');
+layerCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseLayerCount', 1), 'Release layer count');
+zStepUm = localFiniteScalar(localFieldOrDefault(lattice, 'releaseZStepUm', 0), 'Release Z step');
+repeatCount = localPositiveInteger(localFieldOrDefault(lattice, 'releaseRepeatCount', 1), 'Release repeat count');
+releaseOrder = localNormalizeOption(localFieldOrDefault(lattice, 'releaseOrder', 'inside_out'));
+if ~any(releaseOrder == ["inside_out", "outside_in"])
+    error('Release order must be Inside-out or Outside-in.');
+end
+
+if wallMarginUm >= radiusUm
+    error('Release wall margin must be smaller than the circle radius %s %s.', ...
+        localCompactDistance(radiusUm, displayUnit), unitText);
+end
+if ringCount > 1 && ringPitchUm <= 0
+    error('Release ring pitch must be greater than 0 when ring count is greater than 1.');
+end
+maxRingOffsetUm = (ringCount - 1) * ringPitchUm;
+if maxRingOffsetUm >= radiusUm
+    error('Release rings extend past the circle center. Reduce ring count or ring pitch.');
+end
+if layerCount > 1 && zStepUm == 0
+    error('Release Z step must be non-zero when layer count is greater than 1.');
+end
+
+hatchRadiusUm = radiusUm - wallMarginUm;
+if hatchPitchUm > 0 && hatchRadiusUm <= 0
+    error('Release hatch region collapsed. Reduce the wall margin.');
+end
+
+allStartUm = zeros(0, 3);
+allEndUm = zeros(0, 3);
+allPowerValues = zeros(0, 1);
+allSpeedValues = zeros(0, 1);
+allGroupIds = zeros(0, 1);
+allGroupSegments = zeros(0, 1);
+groupCounter = 0;
+
+for iLayer = 1:layerCount
+    layerCenterUm = centerUm;
+    layerCenterUm(3) = centerUm(3) + (iLayer - 1) * zStepUm;
+
+    if hatchPitchUm > 0
+        [hatchStartUm, hatchEndUm] = localCircleHatchSegments( ...
+            layerCenterUm, hatchRadiusUm, startAngleDeg, hatchPitchUm);
+    else
+        hatchStartUm = zeros(0, 3);
+        hatchEndUm = zeros(0, 3);
+    end
+
+    if releaseOrder == "inside_out"
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues, allGroupIds, allGroupSegments, groupCounter] = ...
+            localAppendGroupedReleaseSegments(allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            allGroupIds, allGroupSegments, groupCounter, hatchStartUm, hatchEndUm, ...
+            hatchPowerPercent, hatchSpeedMmPerSecond, false);
+        ringOffsetsUm = ((ringCount - 1):-1:0) * ringPitchUm;
+    else
+        ringOffsetsUm = (0:(ringCount - 1)) * ringPitchUm;
+    end
+
+    for iRing = 1:numel(ringOffsetsUm)
+        ringRadiusUm = radiusUm - ringOffsetsUm(iRing);
+        if ringRadiusUm <= 0
+            error('Release ring %d collapsed. Reduce ring count or ring pitch.', iRing);
+        end
+        [ringStartUm, ringEndUm] = localCircleEdgeSegments( ...
+            layerCenterUm, ringRadiusUm, startAngleDeg, segmentCount, direction);
+        if ringOffsetsUm(iRing) == 0
+            segmentPowerPercent = powerPercent;
+            segmentSpeedMmPerSecond = cutSpeedMmPerSecond;
+        else
+            segmentPowerPercent = ringPowerPercent;
+            segmentSpeedMmPerSecond = ringSpeedMmPerSecond;
+        end
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues, allGroupIds, allGroupSegments, groupCounter] = ...
+            localAppendGroupedReleaseSegments(allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            allGroupIds, allGroupSegments, groupCounter, ringStartUm, ringEndUm, ...
+            segmentPowerPercent, segmentSpeedMmPerSecond, true);
+    end
+
+    if releaseOrder == "outside_in"
+        [allStartUm, allEndUm, allPowerValues, allSpeedValues, allGroupIds, allGroupSegments, groupCounter] = ...
+            localAppendGroupedReleaseSegments(allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+            allGroupIds, allGroupSegments, groupCounter, hatchStartUm, hatchEndUm, ...
+            hatchPowerPercent, hatchSpeedMmPerSecond, false);
+    end
+end
+
+if isempty(allStartUm)
+    error('Circle release cut generated zero cut segments.');
+end
+
+data = localBuildCutScanData(allStartUm, allEndUm, allPowerValues, ...
+    allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor, 0);
+data = localAppendCutGroupColumns(data, allGroupIds, allGroupSegments);
+data = localRepeatRows(data, repeatCount);
+[leadInValuesUm, leadOutValuesUm] = localCutLeadDistances( ...
+    allSpeedValues, accelerationMmPerSecondSquared, leadSafetyFactor, exitSafetyFactor);
+
+allX = [data(:, 8); data(:, 1); data(:, 5); data(:, 11)];
+allY = [data(:, 9); data(:, 2); data(:, 6); data(:, 12)];
+allZ = [data(:, 10); data(:, 3); data(:, 7); data(:, 13)];
+
+prefix = sprintf('circlerelease_%s_radius_%s_start_%s_seg_%d_layers_%d_dz_%s_rings_%d_rpitch_%s_margin_%s_hatch_%s_wallP_%s_wallS_%s_ringP_%s_ringS_%s_hatchP_%s_hatchS_%s', ...
+    char(releaseOrder), localCompactDistance(radiusUm, displayUnit), ...
+    localCompactNumber(startAngleDeg), segmentCount, layerCount, localCompactDistance(zStepUm, displayUnit), ...
+    ringCount, localCompactDistance(ringPitchUm, displayUnit), ...
+    localCompactDistance(wallMarginUm, displayUnit), localCompactDistance(hatchPitchUm, displayUnit), ...
+    localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
+    localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
+    localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+if repeatCount > 1
+    prefix = sprintf('%s_rep_%d', prefix, repeatCount);
+end
+
+summary = struct();
+summary.pointCount = size(data, 1);
+summary.sourcePointCount = size(data, 1);
+summary.xRangeMm = [min(allX), max(allX)];
+summary.yRangeMm = [min(allY), max(allY)];
+summary.zRangeMm = [min(allZ), max(allZ)];
+summary.powerRange = [min(data(:, 4)), max(data(:, 4))];
+summary.latticeType = 'circle_release_cut';
+summary.latticeLabel = 'Circle Release Cut';
+summary.pitchLabel = sprintf(['radius %s %s, start angle %s deg, %d segments/ring, %s; ', ...
+    '%d Z layer(s), dz %s %s; %d circular ring(s) at %s %s pitch; ', ...
+    'hatch pitch %s %s with %s %s wall margin; wall P/speed %s/%s, ', ...
+    'ring P/speed %s/%s, hatch P/speed %s/%s'], ...
+    localCompactDistance(radiusUm, displayUnit), unitText, localCompactNumber(startAngleDeg), ...
+    segmentCount, localHexagonCutDirectionLabel(direction), layerCount, localCompactDistance(zStepUm, displayUnit), unitText, ...
+    ringCount, localCompactDistance(ringPitchUm, displayUnit), unitText, ...
+    localCompactDistance(hatchPitchUm, displayUnit), unitText, ...
+    localCompactDistance(wallMarginUm, displayUnit), unitText, ...
+    localCompactNumber(powerPercent), localCompactNumber(cutSpeedMmPerSecond), ...
+    localCompactNumber(ringPowerPercent), localCompactNumber(ringSpeedMmPerSecond), ...
+    localCompactNumber(hatchPowerPercent), localCompactNumber(hatchSpeedMmPerSecond));
+if repeatCount > 1
+    summary.pitchLabel = sprintf('%s; repeated %d time(s)', summary.pitchLabel, repeatCount);
+end
+summary.rowSpacingUm = hatchPitchUm;
+summary.regionMode = 'circle_release_cut';
+summary.regionLabel = 'Internal hatch plus grouped continuous circular release rings';
+summary.pathMode = 'circle_release_cut';
+if releaseOrder == "outside_in"
+    summary.pathModeLabel = 'per Z layer: final circular wall, then outer-to-inner release rings, then internal 3-direction hatch chords';
+    orderSummary = 'final circular wall first on each layer';
+else
+    summary.pathModeLabel = 'per Z layer: internal 3-direction hatch chords, then inner-to-outer grouped circular rings';
+    orderSummary = 'final circular wall last on each layer';
+end
+summary.powerMode = 'fixed_value';
+summary.powerModeLabel = sprintf('Wall/Ring/Hatch fixed values: %s / %s / %s', ...
+    localCompactNumber(powerPercent), localCompactNumber(ringPowerPercent), localCompactNumber(hatchPowerPercent));
+summary.layerTraversalLabel = sprintf('Z layers follow Z = %s %s + k * %s %s, %s; each circular ring is one continuous cut group', ...
+    localCompactDistance(centerUm(3), displayUnit), unitText, ...
+    localCompactDistance(zStepUm, displayUnit), unitText, orderSummary);
+summary.prefix = prefix;
+summary.releaseOrder = char(releaseOrder);
+summary.cutSpeedMmPerSecond = cutSpeedMmPerSecond;
+summary.releaseRingPowerPercent = ringPowerPercent;
+summary.releaseRingSpeedMmPerSecond = ringSpeedMmPerSecond;
+summary.releaseHatchPowerPercent = hatchPowerPercent;
+summary.releaseHatchSpeedMmPerSecond = hatchSpeedMmPerSecond;
+summary.accelerationMmPerSecondSquared = accelerationMmPerSecondSquared;
+summary.leadInUm = [min(leadInValuesUm), max(leadInValuesUm)];
+summary.leadOutUm = [min(leadOutValuesUm), max(leadOutValuesUm)];
+summary.releaseWallMarginUm = wallMarginUm;
+summary.releaseRingCount = ringCount;
+summary.releaseRingPitchUm = ringPitchUm;
+summary.releaseHatchPitchUm = hatchPitchUm;
+summary.releaseLayerCount = layerCount;
+summary.releaseZStepUm = zStepUm;
+summary.releaseRepeatCount = repeatCount;
+summary.radiusUm = radiusUm;
+summary.circleSegmentCount = segmentCount;
+end
+
 function [allStartUm, allEndUm, allPowerValues, allSpeedValues] = localAppendReleaseSegments( ...
     allStartUm, allEndUm, allPowerValues, allSpeedValues, segmentStartUm, segmentEndUm, powerPercent, speedMmPerSecond)
 segmentCount = size(segmentStartUm, 1);
@@ -957,12 +1170,60 @@ allPowerValues = [allPowerValues; repmat(powerPercent, segmentCount, 1)];
 allSpeedValues = [allSpeedValues; repmat(speedMmPerSecond, segmentCount, 1)];
 end
 
+function [allStartUm, allEndUm, allPowerValues, allSpeedValues, allGroupIds, allGroupSegments, groupCounter] = ...
+    localAppendGroupedReleaseSegments(allStartUm, allEndUm, allPowerValues, allSpeedValues, ...
+    allGroupIds, allGroupSegments, groupCounter, segmentStartUm, segmentEndUm, ...
+    powerPercent, speedMmPerSecond, isContinuousGroup)
+segmentCount = size(segmentStartUm, 1);
+if segmentCount == 0
+    return;
+end
+
+if isContinuousGroup
+    groupCounter = groupCounter + 1;
+    groupIds = repmat(groupCounter, segmentCount, 1);
+    groupSegments = (1:segmentCount).';
+else
+    groupIds = (groupCounter + 1:groupCounter + segmentCount).';
+    groupSegments = ones(segmentCount, 1);
+    groupCounter = groupCounter + segmentCount;
+end
+
+allStartUm = [allStartUm; segmentStartUm];
+allEndUm = [allEndUm; segmentEndUm];
+allPowerValues = [allPowerValues; repmat(powerPercent, segmentCount, 1)];
+allSpeedValues = [allSpeedValues; repmat(speedMmPerSecond, segmentCount, 1)];
+allGroupIds = [allGroupIds; groupIds];
+allGroupSegments = [allGroupSegments; groupSegments];
+end
+
 function data = localRepeatRows(data, repeatCount)
 if repeatCount <= 1 || isempty(data)
     return;
 end
 
-data = repmat(data, repeatCount, 1);
+baseData = data;
+data = repmat(baseData, repeatCount, 1);
+if size(baseData, 2) >= 18
+    baseRowCount = size(baseData, 1);
+    maxGroupId = max(baseData(:, 17));
+    for iRepeat = 2:repeatCount
+        rows = (iRepeat - 1) * baseRowCount + (1:baseRowCount);
+        data(rows, 17) = data(rows, 17) + (iRepeat - 1) * maxGroupId;
+    end
+end
+end
+
+function data = localAppendCutGroupColumns(data, groupIds, groupSegments)
+if size(data, 1) ~= numel(groupIds) || size(data, 1) ~= numel(groupSegments)
+    error('Cut group columns must match the generated cut segment count.');
+end
+if any(~isfinite(groupIds) | groupIds < 1 | groupIds ~= round(groupIds) | ...
+        ~isfinite(groupSegments) | groupSegments < 1 | groupSegments ~= round(groupSegments))
+    error('Cut group columns must contain positive integers.');
+end
+
+data = [data, groupIds(:), groupSegments(:)];
 end
 
 function [cutStartUm, cutEndUm] = localHexagonEdgeSegments(centerUm, sideLengthUm, rotationDeg, direction)
@@ -982,6 +1243,65 @@ verticesUm = [ ...
     centerUm(1) + sideLengthUm * cosd(anglesDeg), ...
     centerUm(2) + sideLengthUm * sind(anglesDeg), ...
     repmat(centerUm(3), 6, 1)];
+end
+
+function [cutStartUm, cutEndUm] = localCircleEdgeSegments(centerUm, radiusUm, startAngleDeg, segmentCount, direction)
+angleStep = 360 / segmentCount;
+if localNormalizeOption(direction) == "clockwise"
+    angleStep = -angleStep;
+end
+
+anglesDeg = startAngleDeg + (0:segmentCount - 1).' * angleStep;
+verticesUm = [ ...
+    centerUm(1) + radiusUm * cosd(anglesDeg), ...
+    centerUm(2) + radiusUm * sind(anglesDeg), ...
+    repmat(centerUm(3), segmentCount, 1)];
+cutStartUm = verticesUm;
+cutEndUm = verticesUm([2:segmentCount, 1], :);
+end
+
+function [hatchStartUm, hatchEndUm] = localCircleHatchSegments(centerUm, radiusUm, startAngleDeg, hatchPitchUm)
+hatchStartUm = zeros(0, 3);
+hatchEndUm = zeros(0, 3);
+if hatchPitchUm <= 0
+    return;
+end
+
+centerXY = centerUm(1:2);
+familyAnglesDeg = startAngleDeg + [0, 60, 120];
+lineCount = 0;
+minSegmentLengthUm = max(1e-6, hatchPitchUm * 0.05);
+
+for iFamily = 1:numel(familyAnglesDeg)
+    directionXY = [cosd(familyAnglesDeg(iFamily)), sind(familyAnglesDeg(iFamily))];
+    normalXY = [-directionXY(2), directionXY(1)];
+    firstOffset = ceil((-radiusUm + 1e-9) / hatchPitchUm) * hatchPitchUm;
+    lastOffset = floor((radiusUm - 1e-9) / hatchPitchUm) * hatchPitchUm;
+    offsets = firstOffset:hatchPitchUm:lastOffset;
+
+    for iOffset = 1:numel(offsets)
+        halfLengthUm = sqrt(max(radiusUm ^ 2 - offsets(iOffset) ^ 2, 0));
+        if 2 * halfLengthUm < minSegmentLengthUm
+            continue;
+        end
+
+        linePointXY = centerXY + offsets(iOffset) * normalXY;
+        pointA = linePointXY - halfLengthUm * directionXY;
+        pointB = linePointXY + halfLengthUm * directionXY;
+
+        lineCount = lineCount + 1;
+        if mod(lineCount, 2) == 0
+            startXY = pointB;
+            endXY = pointA;
+        else
+            startXY = pointA;
+            endXY = pointB;
+        end
+
+        hatchStartUm(end + 1, :) = [startXY, centerUm(3)]; %#ok<AGROW>
+        hatchEndUm(end + 1, :) = [endXY, centerUm(3)]; %#ok<AGROW>
+    end
+end
 end
 
 function centersUm = localHoneycombArrayCenters(arrayCenterUm, sideLengthUm, rotationDeg, arrayRows, arrayCols)
