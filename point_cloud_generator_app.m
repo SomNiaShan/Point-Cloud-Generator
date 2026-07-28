@@ -49,6 +49,7 @@ controlTabs.Layout.Column = 1;
 latticeTab = uitab(controlTabs, 'Title', 'Lattice');
 latticeTab.Scrollable = 'on';
 powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
+powerOrderTab.Scrollable = 'on';
 
 latticeTabGrid = uigridlayout(latticeTab, [34, 1]);
 latticeTabGrid.RowHeight = repmat({'fit'}, 1, 34);
@@ -432,8 +433,8 @@ ui.PlanPanel = uipanel(powerOrderGrid, 'Title', 'Exposure / Scan');
 ui.PlanPanel.Layout.Row = 3;
 ui.PlanPanel.Layout.Column = 1;
 
-planGrid = uigridlayout(ui.PlanPanel, [8, 1]);
-planGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+planGrid = uigridlayout(ui.PlanPanel, [11, 1]);
+planGrid.RowHeight = repmat({'fit'}, 1, 11);
 planGrid.RowSpacing = 5;
 planGrid.Padding = [6, 6, 6, 6];
 
@@ -446,30 +447,46 @@ ui.ExposureModeRow.Layout.Row = 1;
 ui.DwellSecondsRow.Layout.Row = 2;
 ui.DwellSecondsField.ValueChangedFcn = @onPlanParamChanged;
 
+[ui.PointExposureCountRow, ui.PointExposureCountField] = createNumericRow( ...
+    planGrid, 'Exposures per point', 1, tips.pointExposureCount);
+ui.PointExposureCountRow.Layout.Row = 3;
+ui.PointExposureCountField.Limits = [1, Inf];
+ui.PointExposureCountField.RoundFractionalValues = 'on';
+ui.PointExposureCountField.ValueDisplayFormat = '%.0f';
+ui.PointExposureCountField.ValueChangedFcn = @onPlanParamChanged;
+
 [ui.ScanAxisRow, ui.ScanAxisDropDown] = createDropdownRow( ...
     planGrid, 'Scan Axis', {'X', 'Y', 'Z'}, 'Z', @onPlanParamChanged, [], tips.scanAxis);
-ui.ScanAxisRow.Layout.Row = 3;
+ui.ScanAxisRow.Layout.Row = 4;
 
 [ui.ScanDirectionRow, ui.ScanDirectionDropDown] = createDropdownRow( ...
     planGrid, 'Direction', {'Positive', 'Negative'}, 'Positive', @onPlanParamChanged, ...
     {'Positive', 'Negative'}, tips.scanDirection);
-ui.ScanDirectionRow.Layout.Row = 4;
+ui.ScanDirectionRow.Layout.Row = 5;
 
 [ui.ScanAnchorRow, ui.ScanAnchorDropDown] = createDropdownRow( ...
     planGrid, 'Anchor', {'Centered on point', 'Start at point'}, 'Start at point', @onPlanParamChanged, ...
     {'Center on point', 'Start at point'}, tips.scanAnchor);
-ui.ScanAnchorRow.Layout.Row = 5;
+ui.ScanAnchorRow.Layout.Row = 6;
 
 [ui.ScanLengthRow, ui.ScanLengthField] = createNumericRow(planGrid, 'Length (mm)', 0.01, tips.scanLength);
-ui.ScanLengthRow.Layout.Row = 6;
+ui.ScanLengthRow.Layout.Row = 7;
 ui.ScanLengthField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.ScanSpeedRow, ui.ScanSpeedField] = createNumericRow(planGrid, 'Speed (mm/s)', 0.01, tips.scanSpeed);
-ui.ScanSpeedRow.Layout.Row = 7;
+ui.ScanSpeedRow.Layout.Row = 8;
 ui.ScanSpeedField.ValueChangedFcn = @onPlanParamChanged;
 
+[ui.ScanLeadInRow, ui.ScanLeadInField] = createNumericRow(planGrid, 'Lead-in (mm)', 0, tips.scanLeadIn);
+ui.ScanLeadInRow.Layout.Row = 9;
+ui.ScanLeadInField.ValueChangedFcn = @onPlanParamChanged;
+
+[ui.ScanLeadOutRow, ui.ScanLeadOutField] = createNumericRow(planGrid, 'Lead-out (mm)', 0, tips.scanLeadOut);
+ui.ScanLeadOutRow.Layout.Row = 10;
+ui.ScanLeadOutField.ValueChangedFcn = @onPlanParamChanged;
+
 [ui.PauseSecondsRow, ui.PauseSecondsField] = createNumericRow(planGrid, 'Pre-write pause (s)', 0.1, tips.pauseSeconds);
-ui.PauseSecondsRow.Layout.Row = 8;
+ui.PauseSecondsRow.Layout.Row = 11;
 ui.PauseSecondsField.ValueChangedFcn = @onPlanParamChanged;
 
 ui.ActionPanel = uipanel(controlPanelGrid, 'BorderType', 'none');
@@ -482,7 +499,8 @@ actionGrid.RowSpacing = 5;
 actionGrid.Padding = [0, 0, 0, 0];
 
 ui.ImportHintLabel = uilabel(actionGrid, ...
-    'Text', 'Saved files include headers: mode, start/end XYZ, power, dwell, speed, pause, lead/exit, and cut group columns.', ...
+    'Text', ['Saved files use writing-plan v2: point or path operations, explicit laser on/off ', ...
+    'segments, path groups, start/end XYZ, speed, power, dwell, pause, and source recipe.'], ...
     'WordWrap', 'on');
 ui.ImportHintLabel.Layout.Row = 1;
 ui.ImportHintLabel.Layout.Column = 1;
@@ -694,7 +712,7 @@ applyCompactFonts(fig);
             if ~state.previewFromLoadedPlan
                 refreshPlanFromCurrentSettings();
             end
-            updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+            updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
         end
     end
 
@@ -710,17 +728,20 @@ applyCompactFonts(fig);
 
         isScan = string(ui.ExposureModeDropDown.Value) == "Axis scan";
         setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ~isScan);
-        setPanelRow(planGrid, 3, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
-        setPanelRow(planGrid, 4, ui.ScanDirectionRow, 'fit', isScan);
-        setPanelRow(planGrid, 5, ui.ScanAnchorRow, 'fit', isScan);
-        setPanelRow(planGrid, 6, ui.ScanLengthRow, 'fit', isScan && ~isGrating);
-        setPanelRow(planGrid, 7, ui.ScanSpeedRow, 'fit', isScan);
-        setPanelRow(planGrid, 8, ui.PauseSecondsRow, 'fit', ~isZPush);
+        setPanelRow(planGrid, 3, ui.PointExposureCountRow, 'fit', ~isScan);
+        setPanelRow(planGrid, 4, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
+        setPanelRow(planGrid, 5, ui.ScanDirectionRow, 'fit', isScan);
+        setPanelRow(planGrid, 6, ui.ScanAnchorRow, 'fit', isScan);
+        setPanelRow(planGrid, 7, ui.ScanLengthRow, 'fit', isScan && ~isGrating);
+        setPanelRow(planGrid, 8, ui.ScanSpeedRow, 'fit', isScan);
+        setPanelRow(planGrid, 9, ui.ScanLeadInRow, 'fit', isScan);
+        setPanelRow(planGrid, 10, ui.ScanLeadOutRow, 'fit', isScan);
+        setPanelRow(planGrid, 11, ui.PauseSecondsRow, 'fit', ~isZPush);
 
         if ~isempty(state.generatedData) && ~isempty(state.generatedSummary) && ~state.previewFromLoadedPlan
             try
                 refreshPlanFromCurrentSettings();
-                updatePreview(state.generatedData, state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+                updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
                 ui.StatusLabel.Text = sprintf('Updated %s plan.', exposureModeDisplayName(ui.ExposureModeDropDown.Value));
             catch err
                 ui.StatusLabel.Text = ['Invalid plan parameters: ', err.message];
@@ -922,8 +943,8 @@ applyCompactFonts(fig);
             state.generatedSummary = summary;
             state.previewFromLoadedPlan = false;
             refreshPlanFromCurrentSettings();
-            updatePreview(data, prefix, summary, state.generatedPlanTable);
-            ui.StatusLabel.Text = sprintf('Generated %d operations.', summary.pointCount);
+            updatePreview(prefix, summary, state.generatedPlanTable);
+            ui.StatusLabel.Text = sprintf('Generated %d operations.', height(state.generatedPlanTable));
         catch err
             uialert(fig, err.message, 'Generate Failed');
             ui.StatusLabel.Text = 'Generate failed.';
@@ -956,7 +977,7 @@ applyCompactFonts(fig);
             state.previewFromLoadedPlan = true;
             state.lastSaveFolder = folderName;
 
-            updatePreview(data, prefix, summary, planTable);
+            updatePreview(prefix, summary, planTable);
             ui.FileHintLabel.Text = ['Loaded: ', fullPath];
             ui.StatusLabel.Text = sprintf('Loaded %d operations.', height(planTable));
         catch err
@@ -1229,8 +1250,15 @@ applyCompactFonts(fig);
         isCircleReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Circle Release Cut";
         isCutMode = isHexCut || isHexReleaseCut || isHexReleaseArray || isCircleReleaseCut;
         planConfig = struct();
-        planConfig.mode = normalizePlanOption(ui.ExposureModeDropDown.Value);
+        exposureMode = normalizePlanOption(ui.ExposureModeDropDown.Value);
+        if exposureMode == "point_dwell"
+            planConfig.profile = "point";
+        else
+            planConfig.profile = "axis_path";
+        end
         planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
+        planConfig.exposuresPerPoint = validatePositiveInteger(ui.PointExposureCountField.Value, 'Exposures per point');
+        ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
         planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
         planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
         planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
@@ -1240,27 +1268,38 @@ applyCompactFonts(fig);
             planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length'));
         end
         planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
+        planConfig.scanLeadInMm = validateNonnegativeScalar(ui.ScanLeadInField.Value, 'Scan lead-in');
+        planConfig.scanLeadOutMm = validateNonnegativeScalar(ui.ScanLeadOutField.Value, 'Scan lead-out');
         planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
         planConfig.preserveOrder = isGrating || isZPush;
+        latticeRecipe = normalizePlanOption(ui.LatticeTypeDropDown.Value);
 
         if isGrating
-            planConfig.mode = "axis_scan";
+            planConfig.profile = "axis_path";
             planConfig.scanAxis = inferredGratingScanAxis();
         elseif isZPush
-            planConfig.mode = "point_dwell";
+            planConfig.profile = "point";
         elseif isCutMode
-            planConfig.mode = "cut_scan";
+            planConfig.profile = "recipe_path";
             planConfig.preserveOrder = true;
+        end
+
+        if planConfig.profile == "axis_path"
+            planConfig.sourceRecipe = latticeRecipe + "_axis_scan";
+        elseif planConfig.profile == "point"
+            planConfig.sourceRecipe = latticeRecipe + "_point_dwell";
+        else
+            planConfig.sourceRecipe = latticeRecipe;
         end
     end
 
-    function updatePreview(data, prefix, summary, planTable)
-        if nargin < 4 || isempty(planTable)
+    function updatePreview(prefix, summary, planTable)
+        if nargin < 3 || isempty(planTable)
             refreshPlanFromCurrentSettings();
             planTable = state.generatedPlanTable;
         end
 
-        plotIdx = localPreviewIndices(size(data, 1), state.maxPlotPreviewPoints);
+        plotIdx = localPreviewIndices(height(planTable), state.maxPlotPreviewPoints);
         plotTable = planTable(plotIdx, :);
 
         cla(ui.PreviewAxes);
@@ -1274,21 +1313,16 @@ applyCompactFonts(fig);
                 'LineWidth', 0.35);
         end
 
-        scanMask = string(plotTable.mode) == "scan";
-        if any(scanMask)
-            scanTable = plotTable(scanMask, :);
-            drawScanPreviewLines(ui.PreviewAxes, scanTable, [0.95, 0.45, 0.12]);
+        pathMask = string(plotTable.operation) == "path";
+        if any(pathMask)
+            drawPathPreviewLines(ui.PreviewAxes, plotTable(pathMask, :));
         end
 
-        cutMask = string(plotTable.mode) == "cut";
-        if any(cutMask)
-            cutTable = plotTable(cutMask, :);
-            drawCutPreviewLines(ui.PreviewAxes, cutTable);
-        end
-
+        colorMask = string(plotTable.operation) == "point" | string(plotTable.laser_state) == "on";
+        colorTable = plotTable(colorMask, :);
         sc = scatter3(ui.PreviewAxes, ...
-            plotTable.x_mm, plotTable.y_mm, plotTable.z_mm, ...
-            12, plotTable.power, 'filled');
+            colorTable.x_mm, colorTable.y_mm, colorTable.z_mm, ...
+            12, colorTable.power, 'filled');
         sc.DataTipTemplate.DataTipRows(end).Label = 'Power';
 
         hold(ui.PreviewAxes, 'off');
@@ -1308,7 +1342,7 @@ applyCompactFonts(fig);
         ui.DataTable.ColumnName = planTable.Properties.VariableNames;
         ui.DataTable.ColumnEditable = false(1, width(planTable));
 
-        if numel(plotIdx) < size(data, 1)
+        if numel(plotIdx) < height(planTable)
             plotNote = sprintf('3D preview shows a sample of %d operations to keep the UI responsive.', numel(plotIdx));
         else
             plotNote = '3D preview shows all operations in writing order.';
@@ -1319,15 +1353,15 @@ applyCompactFonts(fig);
         else
             ui.FileHintLabel.Text = ['Suggested filename: ', prefix, '_writing_plan.csv'];
         end
-        [pointCount, scanCount, cutCount] = planOperationCounts(planTable);
+        [pointCount, pathGroupCount, pathSegmentCount] = planOperationCounts(planTable);
         ui.SummaryLabel.Text = sprintf([ ...
-            'Operations: %d point dwells, %d axis scans, %d cuts | Source points: %d / %d | Lattice: %s\n', ...
+            'Operations: %d point dwells, %d path groups, %d path segments | Source points: %d / %d | Lattice: %s\n', ...
             'Traversal: %s | Path: %s | Power: %s\n', ...
             '%s\n', ...
             'X range: %.4f to %.4f mm | Y range: %.4f to %.4f mm\n', ...
             'Z range: %.4f to %.4f mm | Power range: %.2f to %.2f\n', ...
             '%s table shows only the first %d rows.'], ...
-            pointCount, scanCount, cutCount, summary.pointCount, summary.sourcePointCount, summary.latticeLabel, ...
+            pointCount, pathGroupCount, pathSegmentCount, summary.pointCount, summary.sourcePointCount, summary.latticeLabel, ...
             summary.layerTraversalLabel, summary.pathModeLabel, summary.powerModeLabel, ...
             summary.pitchLabel, ...
             min(boundsX), max(boundsX), min(boundsY), max(boundsY), min(boundsZ), max(boundsZ), ...
@@ -1468,16 +1502,7 @@ valueUm = valueMm .* 1000;
 end
 
 function names = writingPlanColumnNames()
-names = {'mode', 'x_mm', 'y_mm', 'z_mm', 'x2_mm', 'y2_mm', 'z2_mm', ...
-    'power', 'dwell_s', 'scan_speed_mm_s', 'pause_s', ...
-    'lead_x_mm', 'lead_y_mm', 'lead_z_mm', ...
-    'exit_x_mm', 'exit_y_mm', 'exit_z_mm', 'lead_speed_mm_s', ...
-    'cut_group_id', 'cut_group_segment'};
-end
-
-function names = writingPlanBaseColumnNames()
-names = {'mode', 'x_mm', 'y_mm', 'z_mm', 'x2_mm', 'y2_mm', 'z2_mm', ...
-    'power', 'dwell_s', 'scan_speed_mm_s', 'pause_s'};
+names = writing_plan_v2_column_names();
 end
 
 function planTable = readWritingPlanTable(filePath)
@@ -1494,7 +1519,7 @@ for iDelimiter = 1:numel(delimiters)
         if isempty(rawTable) || height(rawTable) == 0
             error('The loaded writing plan file is empty.');
         end
-        planTable = normalizeWritingPlanTable(rawTable);
+        planTable = normalize_writing_plan_file_table(rawTable);
         return;
     catch err
         messages(end + 1) = string(err.message); %#ok<AGROW>
@@ -1517,185 +1542,19 @@ switch lower(extension)
 end
 end
 
-function planTable = normalizeWritingPlanTable(rawTable)
-expectedNames = writingPlanColumnNames();
-baseNames = writingPlanBaseColumnNames();
-actualNames = string(rawTable.Properties.VariableNames);
-missingNames = setdiff(string(baseNames), actualNames, 'stable');
-if ~isempty(missingNames)
-    error('Writing plan file is missing columns: %s.', strjoin(missingNames, ', '));
-end
-
-n = height(rawTable);
-mode = normalizeLoadedPlanModes(rawTable.mode);
-x = numericColumn(rawTable.x_mm, 'x_mm');
-y = numericColumn(rawTable.y_mm, 'y_mm');
-z = numericColumn(rawTable.z_mm, 'z_mm');
-x2 = numericColumn(rawTable.x2_mm, 'x2_mm');
-y2 = numericColumn(rawTable.y2_mm, 'y2_mm');
-z2 = numericColumn(rawTable.z2_mm, 'z2_mm');
-power = numericColumn(rawTable.power, 'power');
-dwell = numericColumn(rawTable.dwell_s, 'dwell_s');
-scanSpeed = numericColumn(rawTable.scan_speed_mm_s, 'scan_speed_mm_s');
-pauseSeconds = numericColumn(rawTable.pause_s, 'pause_s');
-leadX = numericOptionalColumn(rawTable, 'lead_x_mm', n);
-leadY = numericOptionalColumn(rawTable, 'lead_y_mm', n);
-leadZ = numericOptionalColumn(rawTable, 'lead_z_mm', n);
-exitX = numericOptionalColumn(rawTable, 'exit_x_mm', n);
-exitY = numericOptionalColumn(rawTable, 'exit_y_mm', n);
-exitZ = numericOptionalColumn(rawTable, 'exit_z_mm', n);
-leadSpeed = numericOptionalColumn(rawTable, 'lead_speed_mm_s', n);
-[cutGroupId, cutGroupSegment] = optionalCutGroupColumns(rawTable, mode);
-
-if any(~isfinite(x) | ~isfinite(y) | ~isfinite(z))
-    error('x_mm, y_mm, and z_mm columns must all be finite numbers.');
-end
-if any(~isfinite(power))
-    error('The power column must contain only finite numbers.');
-end
-
-scanMask = mode == "scan";
-if any(scanMask)
-    if any(~isfinite(x2(scanMask)) | ~isfinite(y2(scanMask)) | ~isfinite(z2(scanMask)))
-        error('Rows with mode=scan must contain finite x2_mm, y2_mm, and z2_mm values.');
-    end
-    if any(~isfinite(scanSpeed(scanMask)) | scanSpeed(scanMask) <= 0)
-        error('Rows with mode=scan must contain positive scan_speed_mm_s values.');
-    end
-end
-
-cutMask = mode == "cut";
-if any(cutMask)
-    if any(~isfinite(x2(cutMask)) | ~isfinite(y2(cutMask)) | ~isfinite(z2(cutMask)))
-        error('Rows with mode=cut must contain finite x2_mm, y2_mm, and z2_mm values.');
-    end
-    if any(~isfinite(leadX(cutMask)) | ~isfinite(leadY(cutMask)) | ~isfinite(leadZ(cutMask)) | ...
-            ~isfinite(exitX(cutMask)) | ~isfinite(exitY(cutMask)) | ~isfinite(exitZ(cutMask)))
-        error('Rows with mode=cut must contain finite lead_* and exit_* coordinates.');
-    end
-    if any(~isfinite(scanSpeed(cutMask)) | scanSpeed(cutMask) <= 0)
-        error('Rows with mode=cut must contain positive scan_speed_mm_s values.');
-    end
-    missingLeadSpeed = isnan(leadSpeed(cutMask));
-    cutIndices = find(cutMask);
-    leadSpeed(cutIndices(missingLeadSpeed)) = scanSpeed(cutIndices(missingLeadSpeed));
-    if any(~isfinite(leadSpeed(cutMask)) | leadSpeed(cutMask) <= 0)
-        error('Rows with mode=cut must contain positive lead_speed_mm_s values.');
-    end
-end
-
-pointMask = mode == "point";
-if any(pointMask) && any(~isfinite(dwell(pointMask)) | dwell(pointMask) < 0)
-    error('Rows with mode=point must contain nonnegative dwell_s values.');
-end
-if any(isfinite(pauseSeconds) & pauseSeconds < 0)
-    error('pause_s cannot be negative.');
-end
-
-planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
-    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, cutGroupId, cutGroupSegment, ...
-    'VariableNames', expectedNames);
-
-if height(planTable) ~= n
-    error('The loaded writing plan has an invalid row count.');
-end
-end
-
-function modes = normalizeLoadedPlanModes(value)
-modes = lower(strtrim(string(value)));
-modes = regexprep(modes, '[\s-]+', '_');
-modes(modes == "axis_scan") = "scan";
-modes(modes == "point_dwell") = "point";
-modes(modes == "cut_scan" | modes == "hexagon_cut" | modes == "hexagon_release_cut" | ...
-    modes == "hexagon_release_cut_array" | modes == "circle_release_cut") = "cut";
-if any(~ismember(modes, ["point", "scan", "cut"]))
-    error('The mode column only supports point, scan, or cut.');
-end
-end
-
-function values = numericColumn(value, columnName)
-if isnumeric(value)
-    values = double(value);
-    values = values(:);
-    return;
-end
-
-textValue = strtrim(string(value(:)));
-values = str2double(textValue);
-values = values(:);
-missingMask = ismissing(textValue) | strlength(textValue) == 0 | strcmpi(textValue, "NaN") | strcmpi(textValue, "NA");
-values(missingMask) = nan;
-badText = isnan(values) & ~missingMask;
-if any(badText)
-    error('%s column contains values that cannot be parsed as numbers.', columnName);
-end
-end
-
-function values = numericOptionalColumn(rawTable, columnName, rowCount)
-if any(strcmp(rawTable.Properties.VariableNames, columnName))
-    values = numericColumn(rawTable.(columnName), columnName);
-else
-    values = nan(rowCount, 1);
-end
-end
-
-function [groupId, groupSegment] = optionalCutGroupColumns(rawTable, mode)
-rowCount = height(rawTable);
-cutMask = mode == "cut";
-hasGroupId = any(strcmp(rawTable.Properties.VariableNames, 'cut_group_id'));
-hasGroupSegment = any(strcmp(rawTable.Properties.VariableNames, 'cut_group_segment'));
-if hasGroupSegment && ~hasGroupId
-    error('Writing plan file has cut_group_segment but is missing cut_group_id.');
-end
-
-groupId = nan(rowCount, 1);
-groupSegment = nan(rowCount, 1);
-if ~hasGroupId
-    cutIndices = find(cutMask);
-    groupId(cutIndices) = (1:numel(cutIndices)).';
-    groupSegment(cutIndices) = 1;
-    return;
-end
-
-groupId = numericOptionalColumn(rawTable, 'cut_group_id', rowCount);
-if any(cutMask & (~isfinite(groupId) | groupId < 1 | abs(groupId - round(groupId)) > 1e-9))
-    error('cut_group_id values must be positive integers on cut rows.');
-end
-groupId(cutMask) = round(groupId(cutMask));
-
-if hasGroupSegment
-    groupSegment = numericOptionalColumn(rawTable, 'cut_group_segment', rowCount);
-    if any(cutMask & (~isfinite(groupSegment) | groupSegment < 1 | abs(groupSegment - round(groupSegment)) > 1e-9))
-        error('cut_group_segment values must be positive integers on cut rows.');
-    end
-    groupSegment(cutMask) = round(groupSegment(cutMask));
-else
-    groupSegment = autoCutGroupSegments(groupId, cutMask);
-end
-end
-
-function segments = autoCutGroupSegments(groupId, cutMask)
-segments = nan(numel(groupId), 1);
-for iRow = 1:numel(groupId)
-    if ~cutMask(iRow)
-        continue;
-    end
-    segments(iRow) = nnz(cutMask(1:iRow) & (groupId(1:iRow) == groupId(iRow)));
-end
-end
-
 function data = writingPlanTableToPointData(planTable)
 data = [planTable.x_mm, planTable.y_mm, planTable.z_mm, planTable.power];
 end
 
 function summary = importedPlanSummary(planTable, fileName)
-[pointCount, scanCount, cutCount] = planOperationCounts(planTable);
+[pointCount, pathGroupCount, pathSegmentCount] = planOperationCounts(planTable);
 summary = struct();
 summary.pointCount = height(planTable);
 summary.sourcePointCount = height(planTable);
 summary.latticeLabel = 'Loaded Writing Plan';
 summary.layerTraversalLabel = 'File row order';
-summary.pathModeLabel = sprintf('File order (%d point dwells / %d axis scans / %d cuts)', pointCount, scanCount, cutCount);
+summary.pathModeLabel = sprintf('File order (%d point dwells / %d path groups / %d path segments)', ...
+    pointCount, pathGroupCount, pathSegmentCount);
 summary.powerModeLabel = 'File power column';
 summary.pitchLabel = ['Source file: ', fileName];
 summary.powerRange = [min(planTable.power), max(planTable.power)];
@@ -1703,167 +1562,7 @@ summary.fileHint = ['Loaded: ', fileName];
 end
 
 function planTable = buildWritingPlanTable(data, planConfig)
-if isempty(data)
-    planTable = table();
-    return;
-end
-
-if size(data, 2) < 4
-    error('Generated data must include X, Y, Z, and power columns.');
-end
-
-n = size(data, 1);
-x = data(:, 1);
-y = data(:, 2);
-z = data(:, 3);
-power = data(:, 4);
-x2 = nan(n, 1);
-y2 = nan(n, 1);
-z2 = nan(n, 1);
-dwell = nan(n, 1);
-scanSpeed = nan(n, 1);
-pauseSeconds = repmat(planConfig.pauseSeconds, n, 1);
-leadX = nan(n, 1);
-leadY = nan(n, 1);
-leadZ = nan(n, 1);
-exitX = nan(n, 1);
-exitY = nan(n, 1);
-exitZ = nan(n, 1);
-leadSpeed = nan(n, 1);
-cutGroupId = nan(n, 1);
-cutGroupSegment = nan(n, 1);
-
-switch planConfig.mode
-    case "point_dwell"
-        mode = repmat("point", n, 1);
-        dwell(:) = planConfig.dwellSeconds;
-
-    case "axis_scan"
-        mode = repmat("scan", n, 1);
-        x2 = x;
-        y2 = y;
-        z2 = z;
-
-        axisIndex = find(["X", "Y", "Z"] == upper(planConfig.scanAxis), 1);
-        if isempty(axisIndex)
-            error('Unsupported scan axis: "%s".', planConfig.scanAxis);
-        end
-
-        directionSign = 1;
-        if planConfig.scanDirection == "negative"
-            directionSign = -1;
-        end
-
-        lengthMm = planConfig.scanLengthUm / 1000;
-        startShift = 0;
-        if planConfig.scanAnchor == "center_on_point"
-            startShift = -directionSign * lengthMm / 2;
-            endShift = directionSign * lengthMm / 2;
-        else
-            endShift = directionSign * lengthMm;
-        end
-
-        switch axisIndex
-            case 1
-                x = x + startShift;
-                x2 = data(:, 1) + endShift;
-            case 2
-                y = y + startShift;
-                y2 = data(:, 2) + endShift;
-            case 3
-                z = z + startShift;
-                z2 = data(:, 3) + endShift;
-        end
-
-        scanSpeed(:) = planConfig.scanSpeedMmPerSecond;
-
-    case "cut_scan"
-        if size(data, 2) < 14
-            error('Cut-scan data must include cut end, lead-in, lead-out, and speed columns.');
-        end
-        mode = repmat("cut", n, 1);
-        x2 = data(:, 5);
-        y2 = data(:, 6);
-        z2 = data(:, 7);
-        leadX = data(:, 8);
-        leadY = data(:, 9);
-        leadZ = data(:, 10);
-        exitX = data(:, 11);
-        exitY = data(:, 12);
-        exitZ = data(:, 13);
-        scanSpeed = data(:, 14);
-        if size(data, 2) >= 15
-            leadSpeed = data(:, 15);
-        else
-            leadSpeed = scanSpeed;
-        end
-        if size(data, 2) >= 16
-            pauseSeconds = data(:, 16);
-        else
-            pauseSeconds = zeros(n, 1);
-        end
-        if size(data, 2) >= 18
-            cutGroupId = data(:, 17);
-            cutGroupSegment = data(:, 18);
-        elseif size(data, 2) == 17
-            error('Cut-scan data must include both cut group id and cut group segment columns, or neither.');
-        else
-            cutGroupId = (1:n).';
-            cutGroupSegment = ones(n, 1);
-        end
-        if any(~isfinite([x2; y2; z2; leadX; leadY; leadZ; exitX; exitY; exitZ]))
-            error('Cut-scan coordinates must all be finite.');
-        end
-        if any(~isfinite(scanSpeed) | scanSpeed <= 0 | ~isfinite(leadSpeed) | leadSpeed <= 0)
-            error('Cut-scan speeds must be finite positive values.');
-        end
-        if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
-            error('Cut-scan pause values must be finite nonnegative values.');
-        end
-        if any(~isfinite(cutGroupId) | cutGroupId < 1 | abs(cutGroupId - round(cutGroupId)) > 1e-9 | ...
-                ~isfinite(cutGroupSegment) | cutGroupSegment < 1 | abs(cutGroupSegment - round(cutGroupSegment)) > 1e-9)
-            error('Cut group columns must contain positive integers.');
-        end
-        cutGroupId = round(cutGroupId);
-        cutGroupSegment = round(cutGroupSegment);
-
-    otherwise
-        error('Unsupported exposure mode: "%s".', planConfig.mode);
-end
-
-if planConfig.mode ~= "cut_scan" && size(data, 2) >= 5
-    customPauseSeconds = data(:, 5);
-    if any(~isfinite(customPauseSeconds) | customPauseSeconds < 0)
-        error('Generated data column 5 pause_s must contain only finite nonnegative numbers.');
-    end
-    pauseSeconds = customPauseSeconds;
-end
-
-planTable = table(mode, x, y, z, x2, y2, z2, power, dwell, scanSpeed, pauseSeconds, ...
-    leadX, leadY, leadZ, exitX, exitY, exitZ, leadSpeed, cutGroupId, cutGroupSegment, ...
-    'VariableNames', writingPlanColumnNames());
-
-if ~isfield(planConfig, 'preserveOrder') || ~planConfig.preserveOrder
-    planTable = sortWritingPlanDeepToShallow(planTable);
-end
-end
-
-function planTable = sortWritingPlanDeepToShallow(planTable)
-if isempty(planTable) || height(planTable) < 2
-    return;
-end
-
-operationDepth = planTable.z_mm;
-scanMask = isfinite(planTable.z2_mm);
-operationDepth(scanMask) = min(operationDepth(scanMask), planTable.z2_mm(scanMask));
-leadMask = isfinite(planTable.lead_z_mm);
-operationDepth(leadMask) = min(operationDepth(leadMask), planTable.lead_z_mm(leadMask));
-exitMask = isfinite(planTable.exit_z_mm);
-operationDepth(exitMask) = min(operationDepth(exitMask), planTable.exit_z_mm(exitMask));
-rowIndex = (1:height(planTable)).';
-sortKeys = [operationDepth(:), rowIndex];
-[~, order] = sortrows(sortKeys, [1, 2]);
-planTable = planTable(order, :);
+planTable = writing_plan_v2_from_generated_data(data, planConfig);
 end
 
 function value = validatePositiveScalar(value, label)
@@ -1878,16 +1577,24 @@ if ~(isscalar(value) && isnumeric(value) && isfinite(value) && value >= 0)
 end
 end
 
+function value = validatePositiveInteger(value, label)
+if ~(isscalar(value) && isnumeric(value) && isfinite(value) && value >= 1)
+    error('%s must be a finite positive integer.', label);
+end
+value = round(value);
+end
+
 function value = normalizePlanOption(value)
 value = lower(string(value));
 value = regexprep(value, '[\s-]+', '_');
 end
 
-function [pointCount, scanCount, cutCount] = planOperationCounts(planTable)
-modes = string(planTable.mode);
-pointCount = nnz(modes == "point");
-scanCount = nnz(modes == "scan");
-cutCount = nnz(modes == "cut");
+function [pointCount, pathGroupCount, pathSegmentCount] = planOperationCounts(planTable)
+operations = string(planTable.operation);
+pointCount = nnz(operations == "point");
+pathMask = operations == "path";
+pathSegmentCount = nnz(pathMask);
+pathGroupCount = numel(unique(planTable.group_id(pathMask), 'stable'));
 end
 
 function [xValues, yValues, zValues] = planPreviewBounds(planTable)
@@ -1895,22 +1602,11 @@ xValues = planTable.x_mm;
 yValues = planTable.y_mm;
 zValues = planTable.z_mm;
 
-scanMask = string(planTable.mode) == "scan";
-if any(scanMask)
-    xValues = [xValues; planTable.x2_mm(scanMask)];
-    yValues = [yValues; planTable.y2_mm(scanMask)];
-    zValues = [zValues; planTable.z2_mm(scanMask)];
-end
-
-cutMask = string(planTable.mode) == "cut";
-if any(cutMask)
-    cutTable = planTable(cutMask, :);
-    groups = cutTableGroups(cutTable);
-    leadRows = groups(:, 1);
-    exitRows = groups(:, 2);
-    xValues = [xValues; cutTable.x2_mm; cutTable.lead_x_mm(leadRows); cutTable.exit_x_mm(exitRows)];
-    yValues = [yValues; cutTable.y2_mm; cutTable.lead_y_mm(leadRows); cutTable.exit_y_mm(exitRows)];
-    zValues = [zValues; cutTable.z2_mm; cutTable.lead_z_mm(leadRows); cutTable.exit_z_mm(exitRows)];
+pathMask = string(planTable.operation) == "path";
+if any(pathMask)
+    xValues = [xValues; planTable.x2_mm(pathMask)];
+    yValues = [yValues; planTable.y2_mm(pathMask)];
+    zValues = [zValues; planTable.z2_mm(pathMask)];
 end
 
 xValues = xValues(isfinite(xValues));
@@ -1918,82 +1614,44 @@ yValues = yValues(isfinite(yValues));
 zValues = zValues(isfinite(zValues));
 end
 
-function drawScanPreviewLines(ax, scanTable, colorValue)
-xLines = [scanTable.x_mm.'; scanTable.x2_mm.'; nan(1, height(scanTable))];
-yLines = [scanTable.y_mm.'; scanTable.y2_mm.'; nan(1, height(scanTable))];
-zLines = [scanTable.z_mm.'; scanTable.z2_mm.'; nan(1, height(scanTable))];
-plot3(ax, xLines(:), yLines(:), zLines(:), '-', 'Color', colorValue, 'LineWidth', 1.2);
+function drawPathPreviewLines(ax, pathTable)
+onMask = string(pathTable.laser_state) == "on";
+onColor = [0.9, 0.12, 0.08];
+offColor = [0.45, 0.45, 0.45];
+localDrawSegments(pathTable(onMask, :), onColor, '-', 1.5);
+localDrawSegments(pathTable(~onMask, :), offColor, '--', 0.9);
 
-arrowLimit = min(height(scanTable), 2000);
+arrowLimit = min(height(pathTable), 2000);
 if arrowLimit == 0
     return;
 end
-arrowIdx = unique(round(linspace(1, height(scanTable), arrowLimit)));
-u = scanTable.x2_mm(arrowIdx) - scanTable.x_mm(arrowIdx);
-v = scanTable.y2_mm(arrowIdx) - scanTable.y_mm(arrowIdx);
-w = scanTable.z2_mm(arrowIdx) - scanTable.z_mm(arrowIdx);
-quiver3(ax, scanTable.x_mm(arrowIdx), scanTable.y_mm(arrowIdx), scanTable.z_mm(arrowIdx), ...
-    u, v, w, 0, 'Color', colorValue, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
-end
+arrowIndices = unique(round(linspace(1, height(pathTable), arrowLimit)));
+arrowRows = pathTable(arrowIndices, :);
+arrowOnMask = string(arrowRows.laser_state) == "on";
+localDrawArrows(arrowRows(arrowOnMask, :), onColor);
+localDrawArrows(arrowRows(~arrowOnMask, :), offColor);
 
-function drawCutPreviewLines(ax, cutTable)
-leadColor = [0.45, 0.45, 0.45];
-cutColor = [0.9, 0.12, 0.08];
-groups = cutTableGroups(cutTable);
-leadX = [];
-leadY = [];
-leadZ = [];
-cutX = [];
-cutY = [];
-cutZ = [];
-exitX = [];
-exitY = [];
-exitZ = [];
-for iGroup = 1:size(groups, 1)
-    firstRow = groups(iGroup, 1);
-    lastRow = groups(iGroup, 2);
-    rows = firstRow:lastRow;
-    leadX = [leadX; cutTable.lead_x_mm(firstRow); cutTable.x_mm(firstRow); nan]; %#ok<AGROW>
-    leadY = [leadY; cutTable.lead_y_mm(firstRow); cutTable.y_mm(firstRow); nan]; %#ok<AGROW>
-    leadZ = [leadZ; cutTable.lead_z_mm(firstRow); cutTable.z_mm(firstRow); nan]; %#ok<AGROW>
-    cutX = [cutX; cutTable.x_mm(firstRow); cutTable.x2_mm(rows); nan]; %#ok<AGROW>
-    cutY = [cutY; cutTable.y_mm(firstRow); cutTable.y2_mm(rows); nan]; %#ok<AGROW>
-    cutZ = [cutZ; cutTable.z_mm(firstRow); cutTable.z2_mm(rows); nan]; %#ok<AGROW>
-    exitX = [exitX; cutTable.x2_mm(lastRow); cutTable.exit_x_mm(lastRow); nan]; %#ok<AGROW>
-    exitY = [exitY; cutTable.y2_mm(lastRow); cutTable.exit_y_mm(lastRow); nan]; %#ok<AGROW>
-    exitZ = [exitZ; cutTable.z2_mm(lastRow); cutTable.exit_z_mm(lastRow); nan]; %#ok<AGROW>
-end
-plot3(ax, leadX, leadY, leadZ, '--', 'Color', leadColor, 'LineWidth', 0.9);
-plot3(ax, cutX, cutY, cutZ, '-', 'Color', cutColor, 'LineWidth', 1.5);
-plot3(ax, exitX, exitY, exitZ, ':', 'Color', leadColor, 'LineWidth', 1.0);
+    function localDrawSegments(rows, colorValue, lineStyle, lineWidth)
+        if isempty(rows) || height(rows) == 0
+            return;
+        end
+        xLines = [rows.x_mm.'; rows.x2_mm.'; nan(1, height(rows))];
+        yLines = [rows.y_mm.'; rows.y2_mm.'; nan(1, height(rows))];
+        zLines = [rows.z_mm.'; rows.z2_mm.'; nan(1, height(rows))];
+        plot3(ax, xLines(:), yLines(:), zLines(:), lineStyle, ...
+            'Color', colorValue, 'LineWidth', lineWidth);
+    end
 
-arrowLimit = min(height(cutTable), 2000);
-if arrowLimit == 0
-    return;
-end
-arrowIdx = unique(round(linspace(1, height(cutTable), arrowLimit)));
-u = cutTable.x2_mm(arrowIdx) - cutTable.x_mm(arrowIdx);
-v = cutTable.y2_mm(arrowIdx) - cutTable.y_mm(arrowIdx);
-w = cutTable.z2_mm(arrowIdx) - cutTable.z_mm(arrowIdx);
-quiver3(ax, cutTable.x_mm(arrowIdx), cutTable.y_mm(arrowIdx), cutTable.z_mm(arrowIdx), ...
-    u, v, w, 0, 'Color', cutColor, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
-end
-
-function groups = cutTableGroups(cutTable)
-if isempty(cutTable) || height(cutTable) == 0
-    groups = zeros(0, 2);
-    return;
-end
-
-if any(strcmp(cutTable.Properties.VariableNames, 'cut_group_id')) && all(isfinite(cutTable.cut_group_id))
-    groupIds = cutTable.cut_group_id(:);
-else
-    groupIds = (1:height(cutTable)).';
-end
-
-groupStarts = [1; find(groupIds(2:end) ~= groupIds(1:end - 1)) + 1];
-groupEnds = [groupStarts(2:end) - 1; height(cutTable)];
-groups = [groupStarts, groupEnds];
+    function localDrawArrows(rows, colorValue)
+        if isempty(rows) || height(rows) == 0
+            return;
+        end
+        quiver3(ax, rows.x_mm, rows.y_mm, rows.z_mm, ...
+            rows.x2_mm - rows.x_mm, ...
+            rows.y2_mm - rows.y_mm, ...
+            rows.z2_mm - rows.z_mm, ...
+            0, 'Color', colorValue, 'LineWidth', 0.9, 'MaxHeadSize', 0.8);
+    end
 end
 
 function tips = parameterTooltips()
@@ -2125,12 +1783,19 @@ tips.powerPointsArea = 'Enter one "z_mm, power" pair per line. The app linearly 
 tips.pathMode = 'Controls writing order within the same Z layer: row-major uses the same direction per row; serpentine reverses adjacent rows to reduce travel.';
 tips.exposureMode = 'Choose the exposure mode for the writing plan: point dwell opens the shutter at each point; axis scan moves from a start point to an end point.';
 tips.dwellSeconds = 'Exposure time for each point in point-dwell mode, in seconds.';
+tips.pointExposureCount = ['Number of separate exposures performed consecutively at each point in point-dwell mode. ', ...
+    'Each exposure is written as its own move, settle, and expose operation.'];
 tips.scanAxis = 'Coordinate axis used for axis scans.';
 tips.scanDirection = 'Axis scans move from the start point in the positive or negative coordinate direction; positive Z corresponds to deep-to-shallow.';
 tips.scanAnchor = 'Centered on point means the scan segment is centered on the source point; start at point means the source point is the scan start.';
 tips.scanLength = 'Length of each axis scan, in mm.';
 tips.scanSpeed = 'Stage speed during axis scans, in mm/s.';
-tips.pauseSeconds = 'Settling time after the stage reaches a point or scan start before exposure or scanning, in seconds.';
+tips.scanLeadIn = ['Laser-off travel immediately before the exposed scan, in mm. ', ...
+    'It uses the scan speed and does not change the exposed scan length or anchor.'];
+tips.scanLeadOut = ['Laser-off travel immediately after the exposed scan, in mm. ', ...
+    'It uses the scan speed and does not change the exposed scan length or anchor.'];
+tips.pauseSeconds = ['Settling time after the stage reaches a point or the start of a scan group, ', ...
+    'including any lead-in, before exposure or scanning, in seconds.'];
 tips.previewRows = 'Maximum number of plan rows shown in the table; saving still writes every row.';
 end
 function [rowPanel, dropdown] = createDropdownRow(parent, labelText, items, defaultValue, callback, itemData, tooltipText)
