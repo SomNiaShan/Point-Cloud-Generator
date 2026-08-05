@@ -13,10 +13,20 @@ state.generatedPlanTable = table();
 state.generatedPrefix = '';
 state.generatedSummary = struct([]);
 state.previewFromLoadedPlan = false;
+state.generatedSourceType = "";
+state.generatedGeneratorType = "";
 state.lastSaveFolder = appFolder;
 state.maxTablePreviewRows = 5000;
 state.tablePreviewRowLimit = 200;
 state.maxPlotPreviewPoints = 50000;
+state.maxPatternCells = 1000000;
+state.maxPatternPlanRows = 2000000;
+state.maxPatternRecipes = 256;
+state.patternFilePath = "";
+state.patternSheetName = "";
+state.patternMatrix = [];
+state.patternInfo = struct([]);
+state.patternPoints = table();
 tips = parameterTooltips();
 
 figurePosition = compactFigurePosition();
@@ -32,7 +42,7 @@ mainGrid.RowHeight = {'1x'};
 mainGrid.Padding = [10, 10, 10, 10];
 mainGrid.ColumnSpacing = 10;
 
-controlPanel = uipanel(mainGrid, 'Title', 'Generator Settings');
+controlPanel = uipanel(mainGrid, 'Title', 'Point Cloud Workflow');
 controlPanel.Layout.Row = 1;
 controlPanel.Layout.Column = 1;
 controlPanel.Scrollable = 'on';
@@ -46,10 +56,12 @@ controlPanelGrid.RowSpacing = 6;
 controlTabs = uitabgroup(controlPanelGrid);
 controlTabs.Layout.Row = 1;
 controlTabs.Layout.Column = 1;
-latticeTab = uitab(controlTabs, 'Title', 'Lattice');
+latticeTab = uitab(controlTabs, 'Title', 'Generator');
 latticeTab.Scrollable = 'on';
 powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
 powerOrderTab.Scrollable = 'on';
+patternTab = uitab(controlTabs, 'Title', 'Excel Pattern');
+patternTab.Scrollable = 'on';
 
 latticeTabGrid = uigridlayout(latticeTab, [34, 1]);
 latticeTabGrid.RowHeight = repmat({'fit'}, 1, 34);
@@ -64,6 +76,13 @@ powerOrderGrid.ColumnWidth = {'1x'};
 powerOrderGrid.RowSpacing = 6;
 powerOrderGrid.Padding = [6, 6, 6, 6];
 
+patternTabGrid = uigridlayout(patternTab, [2, 1]);
+patternTabGrid.RowHeight = {340, '1x'};
+patternTabGrid.ColumnWidth = {'1x'};
+patternTabGrid.RowSpacing = 6;
+patternTabGrid.Padding = [6, 6, 6, 6];
+patternTabGrid.Scrollable = 'on';
+
 ui = struct();
 
 latticeGrid = latticeTabGrid;
@@ -71,7 +90,7 @@ latticeGrid = latticeTabGrid;
 latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', ...
     'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array', 'Circle Release Cut'};
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
-    latticeGrid, 'Lattice Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
+    latticeGrid, 'Generator Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
     latticeTypeItems, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
 
@@ -370,6 +389,126 @@ ui.HexArraySelectionTable.Layout.Row = 1;
 ui.HexArraySelectionTable.Layout.Column = 1;
 applyTooltip({ui.HexArraySelectionPanel, ui.HexArraySelectionTable}, tips.hexArraySelection);
 
+ui.PatternPanel = uipanel(patternTabGrid, 'Title', 'Excel Recipe Pattern');
+ui.PatternPanel.Layout.Row = 1;
+ui.PatternPanel.Layout.Column = 1;
+
+patternGrid = uigridlayout(ui.PatternPanel, [5, 1]);
+patternGrid.RowHeight = {72, 'fit', 'fit', 94, 'fit'};
+patternGrid.ColumnWidth = {'1x'};
+patternGrid.RowSpacing = 5;
+patternGrid.Padding = [6, 6, 6, 6];
+
+patternFilePanel = uipanel(patternGrid, 'BorderType', 'none');
+patternFilePanel.Layout.Row = 1;
+patternFilePanel.Layout.Column = 1;
+patternFileGrid = uigridlayout(patternFilePanel, [2, 4]);
+patternFileGrid.RowHeight = {'fit', 'fit'};
+patternFileGrid.ColumnWidth = {105, '1x', 105, 78};
+patternFileGrid.RowSpacing = 4;
+patternFileGrid.ColumnSpacing = 5;
+patternFileGrid.Padding = [0, 0, 0, 0];
+
+ui.PatternChooseFileButton = uibutton(patternFileGrid, ...
+    'push', ...
+    'Text', 'Choose Excel...', ...
+    'ButtonPushedFcn', @onChoosePatternFile);
+ui.PatternChooseFileButton.Layout.Row = 1;
+ui.PatternChooseFileButton.Layout.Column = 1;
+
+ui.PatternFileLabel = uilabel(patternFileGrid, ...
+    'Text', 'No Excel workbook selected.', ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.35, 0.35, 0.35]);
+ui.PatternFileLabel.Layout.Row = 1;
+ui.PatternFileLabel.Layout.Column = [2, 4];
+
+patternSheetLabel = uilabel(patternFileGrid, 'Text', 'Worksheet');
+patternSheetLabel.Layout.Row = 2;
+patternSheetLabel.Layout.Column = 1;
+
+ui.PatternSheetDropDown = uidropdown(patternFileGrid, ...
+    'Items', {'(none)'}, ...
+    'Value', '(none)', ...
+    'Enable', 'off', ...
+    'ValueChangedFcn', @onPatternSheetChanged);
+ui.PatternSheetDropDown.Layout.Row = 2;
+ui.PatternSheetDropDown.Layout.Column = 2;
+
+ui.PatternReloadButton = uibutton(patternFileGrid, ...
+    'push', ...
+    'Text', 'Reload Sheet', ...
+    'Enable', 'off', ...
+    'ButtonPushedFcn', @onReloadPatternSheet);
+ui.PatternReloadButton.Layout.Row = 2;
+ui.PatternReloadButton.Layout.Column = 3;
+
+patternFormatLabel = uilabel(patternFileGrid, ...
+    'Text', '.xlsx only', ...
+    'HorizontalAlignment', 'center', ...
+    'FontColor', [0.45, 0.45, 0.45]);
+patternFormatLabel.Layout.Row = 2;
+patternFormatLabel.Layout.Column = 4;
+applyTooltip({patternFilePanel, ui.PatternChooseFileButton, ui.PatternFileLabel, ...
+    patternSheetLabel, ui.PatternSheetDropDown, ui.PatternReloadButton, patternFormatLabel}, ...
+    tips.patternFile);
+
+[ui.PatternOriginPanel, patternOriginFields] = createValuePanel( ...
+    patternGrid, 'Start Origin (mm)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, 0], tips.patternOrigin);
+ui.PatternOriginPanel.Layout.Row = 2;
+ui.PatternOriginXField = patternOriginFields(1);
+ui.PatternOriginYField = patternOriginFields(2);
+ui.PatternOriginZField = patternOriginFields(3);
+
+[ui.PatternPitchPanel, patternPitchFields] = createValuePanel( ...
+    patternGrid, 'Pixel Pitch (mm)', {'Pitch X', 'Pitch Y'}, [0.002, 0.002], tips.patternPitch);
+ui.PatternPitchPanel.Layout.Row = 3;
+ui.PatternPitchXField = patternPitchFields(1);
+ui.PatternPitchYField = patternPitchFields(2);
+
+patternDirectionPanel = uipanel(patternGrid, 'BorderType', 'none');
+patternDirectionPanel.Layout.Row = 4;
+patternDirectionPanel.Layout.Column = 1;
+patternDirectionGrid = uigridlayout(patternDirectionPanel, [4, 1]);
+patternDirectionGrid.RowHeight = {'fit', 'fit', 'fit', 0};
+patternDirectionGrid.ColumnWidth = {'1x'};
+patternDirectionGrid.RowSpacing = 4;
+patternDirectionGrid.Padding = [0, 0, 0, 0];
+
+[ui.PatternColumnDirectionRow, ui.PatternColumnDirectionDropDown] = createDropdownRow( ...
+    patternDirectionGrid, 'Excel columns', {'Left to right (+X)', 'Right to left (-X)'}, ...
+    '+X', @onPatternSettingsChanged, {'+X', '-X'}, tips.patternColumnDirection);
+ui.PatternColumnDirectionRow.Layout.Row = 1;
+
+[ui.PatternRowDirectionRow, ui.PatternRowDirectionDropDown] = createDropdownRow( ...
+    patternDirectionGrid, 'Excel rows', {'Bottom to top (+Y)', 'Top to bottom (-Y)'}, ...
+    '+Y', @onPatternSettingsChanged, {'+Y', '-Y'}, tips.patternRowDirection);
+ui.PatternRowDirectionRow.Layout.Row = 2;
+
+[ui.PatternTraversalRow, ui.PatternTraversalDropDown] = createDropdownRow( ...
+    patternDirectionGrid, 'Point order', ...
+    {'Serpentine', 'Row-major', 'Recipe-by-recipe'}, ...
+    'serpentine', @onPatternSettingsChanged, ...
+    {'serpentine', 'row_major', 'recipe_by_recipe'}, tips.patternTraversal);
+ui.PatternTraversalRow.Layout.Row = 3;
+
+[ui.PatternRecipeOrderRow, ui.PatternRecipeOrderField] = createTextRow( ...
+    patternDirectionGrid, 'Recipe order', '', tips.patternRecipeOrder);
+ui.PatternRecipeOrderRow.Layout.Row = 4;
+ui.PatternRecipeOrderField.ValueChangedFcn = @onPatternSettingsChanged;
+ui.PatternRecipeOrderRow.Visible = 'off';
+
+ui.PatternStatusLabel = uilabel(patternGrid, ...
+    'Text', 'Choose an .xlsx workbook containing an integer Recipe ID matrix.', ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.25, 0.25, 0.25]);
+ui.PatternStatusLabel.Layout.Row = 5;
+ui.PatternStatusLabel.Layout.Column = 1;
+
+for patternField = [patternOriginFields, patternPitchFields]
+    patternField.ValueChangedFcn = @onPatternSettingsChanged;
+end
+
 ui.PowerPanel = uipanel(powerOrderGrid, 'Title', 'Power');
 ui.PowerPanel.Layout.Row = 1;
 ui.PowerPanel.Layout.Column = 1;
@@ -489,6 +628,48 @@ ui.ScanLeadOutField.ValueChangedFcn = @onPlanParamChanged;
 ui.PauseSecondsRow.Layout.Row = 11;
 ui.PauseSecondsField.ValueChangedFcn = @onPlanParamChanged;
 
+ui.PatternRecipePanel = uipanel(patternTabGrid, 'Title', 'Recipe Definitions');
+ui.PatternRecipePanel.Layout.Row = 2;
+ui.PatternRecipePanel.Layout.Column = 1;
+
+patternRecipeGrid = uigridlayout(ui.PatternRecipePanel, [3, 1]);
+patternRecipeGrid.RowHeight = {'fit', '1x', 'fit'};
+patternRecipeGrid.ColumnWidth = {'1x'};
+patternRecipeGrid.RowSpacing = 5;
+patternRecipeGrid.Padding = [6, 6, 6, 6];
+
+ui.PatternRecipeHintLabel = uilabel(patternRecipeGrid, ...
+    'Text', ['Recipe 0 is locked to Skip. Every processed Recipe must define power, dwell, ', ...
+        'exposures, and pause before a writing plan can be generated. Z Shift uses ', ...
+        'positive values for +Z (up) and negative values for -Z (down/deeper).'], ...
+    'WordWrap', 'on');
+ui.PatternRecipeHintLabel.Layout.Row = 1;
+ui.PatternRecipeHintLabel.Layout.Column = 1;
+
+patternColumnFormat = { ...
+    'numeric', 'char', {'Process', 'Skip'}, patternColorNames(), ...
+    'numeric', 'numeric', 'numeric', 'numeric', 'numeric', 'numeric', 'numeric'};
+ui.PatternRecipeTable = uitable(patternRecipeGrid, ...
+    'Data', cell(0, 11), ...
+    'ColumnName', {'ID', 'Name', 'Action', 'Color', 'Z Shift mm', 'Power', ...
+        'Dwell s', 'Exposures', 'Pause s', 'Pixels', 'Operations'}, ...
+    'ColumnFormat', patternColumnFormat, ...
+    'ColumnEditable', [false, true, true, true, true, true, true, true, true, false, false], ...
+    'ColumnWidth', {48, 100, 78, 82, 82, 70, 70, 78, 70, 68, 86}, ...
+    'RowName', [], ...
+    'CellEditCallback', @onPatternRecipeEdited);
+ui.PatternRecipeTable.Layout.Row = 2;
+ui.PatternRecipeTable.Layout.Column = 1;
+
+ui.PatternRecipeSummaryLabel = uilabel(patternRecipeGrid, ...
+    'Text', 'No Recipe IDs loaded.', ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.3, 0.3, 0.3]);
+ui.PatternRecipeSummaryLabel.Layout.Row = 3;
+ui.PatternRecipeSummaryLabel.Layout.Column = 1;
+applyTooltip({ui.PatternRecipePanel, ui.PatternRecipeHintLabel, ...
+    ui.PatternRecipeTable, ui.PatternRecipeSummaryLabel}, tips.patternRecipes);
+
 ui.ActionPanel = uipanel(controlPanelGrid, 'BorderType', 'none');
 ui.ActionPanel.Layout.Row = 2;
 ui.ActionPanel.Layout.Column = 1;
@@ -558,13 +739,20 @@ previewPanel = uipanel(mainGrid, 'Title', 'Output / Preview');
 previewPanel.Layout.Row = 1;
 previewPanel.Layout.Column = 2;
 
-previewGrid = uigridlayout(previewPanel, [3, 1]);
-previewGrid.RowHeight = {'2.3x', 'fit', '1x'};
+previewGrid = uigridlayout(previewPanel, [4, 1]);
+previewGrid.RowHeight = {'fit', '2.3x', 'fit', '1x'};
 previewGrid.RowSpacing = 6;
 previewGrid.Padding = [6, 6, 6, 6];
 
+[ui.PreviewModeRow, ui.PreviewModeDropDown] = createDropdownRow( ...
+    previewGrid, 'Preview Mode', {'Writing Plan'}, 'Writing Plan', @onPreviewModeChanged, ...
+    [], tips.previewMode);
+ui.PreviewModeRow.Layout.Row = 1;
+ui.PreviewModeRow.Layout.Column = 1;
+ui.PreviewModeDropDown.Enable = 'off';
+
 ui.PreviewAxes = uiaxes(previewGrid);
-ui.PreviewAxes.Layout.Row = 1;
+ui.PreviewAxes.Layout.Row = 2;
 ui.PreviewAxes.Layout.Column = 1;
 ui.PreviewAxes.Box = 'on';
 ui.PreviewAxes.XLabel.String = 'X (mm)';
@@ -580,7 +768,7 @@ ui.PowerColorbar.Label.String = 'Power';
 ui.SummaryLabel = uilabel(previewGrid, ...
     'Text', 'No preview generated yet.', ...
     'WordWrap', 'on');
-ui.SummaryLabel.Layout.Row = 2;
+ui.SummaryLabel.Layout.Row = 3;
 ui.SummaryLabel.Layout.Column = 1;
 
 ui.DataTable = uitable(previewGrid, ...
@@ -588,9 +776,10 @@ ui.DataTable = uitable(previewGrid, ...
     'ColumnEditable', false(1, numel(writingPlanColumnNames())), ...
     'ColumnWidth', repmat({90}, 1, numel(writingPlanColumnNames())), ...
     'RowName', []);
-ui.DataTable.Layout.Row = 3;
+ui.DataTable.Layout.Row = 4;
 ui.DataTable.Layout.Column = 1;
 
+controlTabs.SelectionChangedFcn = @onWorkspaceTabChanged;
 onLatticeTypeChanged();
 onPowerModeChanged();
 onPlanParamChanged();
@@ -598,6 +787,21 @@ onGenerate();
 applyCompactFonts(fig);
 
     function onLatticeTypeChanged(~, ~)
+        if state.generatedSourceType == "loaded_plan"
+            state.generatedData = [];
+            state.generatedPlanTable = table();
+            state.generatedPrefix = '';
+            state.generatedSummary = struct([]);
+            state.previewFromLoadedPlan = false;
+            state.generatedSourceType = "";
+            state.generatedGeneratorType = "";
+            ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
+            ui.DataTable.ColumnName = writingPlanColumnNames();
+            ui.SummaryLabel.Text = 'Generator changed. Generate a new preview before saving.';
+            ui.FileHintLabel.Text = 'Generate a preview for the selected Generator Type.';
+            ui.StatusLabel.Text = 'Loaded plan cleared from memory after Generator Type changed.';
+        end
+
         latticeType = string(ui.LatticeTypeDropDown.Value);
         isStaircase = latticeType == "Staircase";
         isGrating = latticeType == "Segmented Grating";
@@ -672,8 +876,12 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
 
         setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isCutMode);
+        setPanelRow(powerOrderGrid, 2, ui.OrderingPanel, 'fit', true);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
         setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isCutMode);
+        if ~isExcelPatternMode()
+            configurePreviewMode(false);
+        end
         if isGrating
             ui.ExposureModeDropDown.Value = 'Axis scan';
             syncGratingScanAxis();
@@ -685,6 +893,27 @@ applyCompactFonts(fig);
             onPlanParamChanged();
         end
         updateTraversalNote();
+
+        if ~isExcelPatternMode()
+            hasCurrentProceduralPlan = state.generatedSourceType == "procedural" && ...
+                state.generatedGeneratorType == currentGenerationContext() && ...
+                ~isempty(state.generatedPlanTable);
+            hasCurrentLoadedPlan = state.generatedSourceType == "loaded_plan" && ...
+                state.previewFromLoadedPlan && ...
+                state.generatedGeneratorType == currentGenerationContext() && ...
+                ~isempty(state.generatedPlanTable);
+            if hasCurrentProceduralPlan
+                state.previewFromLoadedPlan = false;
+                updatePreview(state.generatedPrefix, state.generatedSummary, ...
+                    state.generatedPlanTable);
+            elseif hasCurrentLoadedPlan
+                state.previewFromLoadedPlan = true;
+                updatePreview(state.generatedPrefix, state.generatedSummary, ...
+                    state.generatedPlanTable);
+            else
+                showGeneratorWorkspacePreview();
+            end
+        end
     end
 
     function onPowerModeChanged(~, ~)
@@ -708,10 +937,20 @@ applyCompactFonts(fig);
         state.tablePreviewRowLimit = validatePreviewRowLimit(ui.PreviewRowsField.Value);
         ui.PreviewRowsField.Value = state.tablePreviewRowLimit;
 
-        if ~isempty(state.generatedData) && ~isempty(state.generatedSummary)
-            if ~state.previewFromLoadedPlan
-                refreshPlanFromCurrentSettings();
+        if state.generatedSourceType == "loaded_plan" && ...
+                state.previewFromLoadedPlan && ...
+                ~isempty(state.generatedPlanTable) && ~isempty(state.generatedSummary)
+            updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+        elseif isExcelPatternMode() && ~isempty(state.patternMatrix)
+            try
+                updatePatternPreview();
+            catch err
+                ui.StatusLabel.Text = ['Pattern preview failed: ', err.message];
             end
+        elseif state.generatedSourceType == "procedural" && ...
+                state.generatedGeneratorType == currentGenerationContext() && ...
+                ~isempty(state.generatedData) && ~isempty(state.generatedSummary)
+            refreshPlanFromCurrentSettings();
             updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
         end
     end
@@ -719,6 +958,9 @@ applyCompactFonts(fig);
     function onPlanParamChanged(~, ~)
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
+        if isExcelPatternMode()
+            return;
+        end
         if isGrating
             ui.ExposureModeDropDown.Value = 'Axis scan';
             syncGratingScanAxis();
@@ -738,7 +980,9 @@ applyCompactFonts(fig);
         setPanelRow(planGrid, 10, ui.ScanLeadOutRow, 'fit', isScan);
         setPanelRow(planGrid, 11, ui.PauseSecondsRow, 'fit', ~isZPush);
 
-        if ~isempty(state.generatedData) && ~isempty(state.generatedSummary) && ~state.previewFromLoadedPlan
+        if ~isempty(state.generatedData) && ~isempty(state.generatedSummary) && ...
+                state.generatedSourceType == "procedural" && ...
+                state.generatedGeneratorType == currentGenerationContext()
             try
                 refreshPlanFromCurrentSettings();
                 updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
@@ -934,14 +1178,1013 @@ applyCompactFonts(fig);
         end
     end
 
+    function tf = isExcelPatternMode()
+        tf = controlTabs.SelectedTab == patternTab;
+    end
+
+    function context = currentGenerationContext()
+        if isExcelPatternMode()
+            context = "Excel Recipe Pattern";
+        else
+            context = string(ui.LatticeTypeDropDown.Value);
+        end
+    end
+
+    function onWorkspaceTabChanged(~, ~)
+        if isExcelPatternMode()
+            state.previewFromLoadedPlan = false;
+            ui.GenerateButton.Text = 'Generate Pattern';
+            configurePreviewMode(true);
+            if ~isempty(state.patternMatrix)
+                try
+                    updatePatternPreview();
+                catch err
+                    ui.StatusLabel.Text = ['Invalid Pattern settings: ', err.message];
+                end
+            else
+                showEmptyPatternPreview();
+            end
+            return;
+        end
+
+        ui.GenerateButton.Text = 'Generate Preview';
+        configurePreviewMode(false);
+        currentContext = currentGenerationContext();
+        canRestoreLoadedPlan = state.generatedSourceType == "loaded_plan" && ...
+            state.generatedGeneratorType == currentContext && ...
+            ~isempty(state.generatedPlanTable) && ~isempty(state.generatedSummary);
+        canRestoreProceduralPlan = state.generatedSourceType == "procedural" && ...
+            state.generatedGeneratorType == currentContext && ...
+            ~isempty(state.generatedPlanTable) && ~isempty(state.generatedSummary);
+
+        if canRestoreLoadedPlan
+            state.previewFromLoadedPlan = true;
+            updatePreview(state.generatedPrefix, state.generatedSummary, ...
+                state.generatedPlanTable);
+        elseif canRestoreProceduralPlan
+            state.previewFromLoadedPlan = false;
+            updatePreview(state.generatedPrefix, state.generatedSummary, ...
+                state.generatedPlanTable);
+        else
+            showGeneratorWorkspacePreview();
+        end
+    end
+
+    function showGeneratorWorkspacePreview()
+        state.previewFromLoadedPlan = false;
+        cla(ui.PreviewAxes);
+        text(ui.PreviewAxes, 0.5, 0.5, ...
+            'Generate a preview for the selected Generator Type.', ...
+            'Units', 'normalized', ...
+            'HorizontalAlignment', 'center', ...
+            'Color', [0.35, 0.35, 0.35]);
+        ui.PreviewAxes.XLabel.String = '';
+        ui.PreviewAxes.YLabel.String = '';
+        ui.PreviewAxes.ZLabel.String = '';
+        title(ui.PreviewAxes, 'Writing Plan Preview');
+        grid(ui.PreviewAxes, 'off');
+        view(ui.PreviewAxes, 2);
+        if isgraphics(ui.PowerColorbar)
+            ui.PowerColorbar.Visible = 'off';
+        end
+        ui.SummaryLabel.Text = ['No preview for the current Generator settings. ', ...
+            'Click Generate Preview before saving.'];
+        ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
+        ui.DataTable.ColumnName = writingPlanColumnNames();
+        ui.FileHintLabel.Text = 'Generate a preview for the selected Generator Type.';
+        ui.StatusLabel.Text = 'Generator workflow selected.';
+    end
+
+    function configurePreviewMode(isPattern)
+        previousValue = string(ui.PreviewModeDropDown.Value);
+        if isPattern
+            ui.PreviewModeDropDown.Items = {'Recipe Map', 'Point Cloud'};
+            if any(previousValue == ["Recipe Map", "Point Cloud"])
+                ui.PreviewModeDropDown.Value = char(previousValue);
+            else
+                ui.PreviewModeDropDown.Value = 'Recipe Map';
+            end
+            ui.PreviewModeDropDown.Enable = 'on';
+        else
+            ui.PreviewModeDropDown.Items = {'Writing Plan'};
+            ui.PreviewModeDropDown.Value = 'Writing Plan';
+            ui.PreviewModeDropDown.Enable = 'off';
+        end
+    end
+
+    function onPreviewModeChanged(~, ~)
+        if isExcelPatternMode()
+            if isempty(state.patternMatrix)
+                showEmptyPatternPreview();
+            else
+                try
+                    updatePatternPreview();
+                catch err
+                    ui.StatusLabel.Text = ['Pattern preview failed: ', err.message];
+                end
+            end
+            return;
+        end
+
+        isCurrentLoadedPlan = state.generatedSourceType == "loaded_plan" && ...
+            state.previewFromLoadedPlan;
+        isCurrentProceduralPlan = state.generatedSourceType == "procedural" && ...
+            state.generatedGeneratorType == currentGenerationContext();
+        if (isCurrentLoadedPlan || isCurrentProceduralPlan) && ...
+                ~isempty(state.generatedPlanTable) && ~isempty(state.generatedSummary)
+            updatePreview(state.generatedPrefix, state.generatedSummary, state.generatedPlanTable);
+        end
+    end
+
+    function onChoosePatternFile(~, ~)
+        try
+            [fileName, folderName] = uigetfile( ...
+                {'*.xlsx', 'Excel workbooks (*.xlsx)'}, ...
+                'Choose Recipe Matrix Workbook', ...
+                state.lastSaveFolder);
+            if isequal(fileName, 0) || isequal(folderName, 0)
+                return;
+            end
+
+            fullPath = fullfile(folderName, fileName);
+            sheetNames = string(sheetnames(fullPath));
+            if isempty(sheetNames)
+                error('The workbook does not contain any worksheets.');
+            end
+
+            selectedSheet = sheetNames(1);
+            [matrix, info] = read_recipe_matrix_xlsx(fullPath, selectedSheet);
+            commitPatternSheet(fullPath, selectedSheet, matrix, info);
+
+            ui.PatternSheetDropDown.Items = cellstr(sheetNames);
+            ui.PatternSheetDropDown.Value = char(selectedSheet);
+            ui.PatternSheetDropDown.Enable = 'on';
+            ui.PatternReloadButton.Enable = 'on';
+            state.lastSaveFolder = folderName;
+        catch err
+            uialert(fig, err.message, 'Excel Import Failed');
+            ui.StatusLabel.Text = 'Excel import failed.';
+        end
+    end
+
+    function onPatternSheetChanged(~, ~)
+        if strlength(state.patternFilePath) == 0
+            return;
+        end
+
+        previousSheet = state.patternSheetName;
+        try
+            selectedSheet = string(ui.PatternSheetDropDown.Value);
+            [matrix, info] = read_recipe_matrix_xlsx(state.patternFilePath, selectedSheet);
+            commitPatternSheet(state.patternFilePath, selectedSheet, matrix, info);
+        catch err
+            if strlength(previousSheet) > 0 && ...
+                    any(string(ui.PatternSheetDropDown.Items) == previousSheet)
+                ui.PatternSheetDropDown.Value = char(previousSheet);
+            end
+            uialert(fig, err.message, 'Worksheet Import Failed');
+            ui.StatusLabel.Text = 'Worksheet import failed.';
+        end
+    end
+
+    function onReloadPatternSheet(~, ~)
+        if strlength(state.patternFilePath) == 0 || strlength(state.patternSheetName) == 0
+            return;
+        end
+
+        try
+            [matrix, info] = read_recipe_matrix_xlsx( ...
+                state.patternFilePath, state.patternSheetName);
+            commitPatternSheet(state.patternFilePath, state.patternSheetName, matrix, info);
+        catch err
+            uialert(fig, err.message, 'Worksheet Reload Failed');
+            ui.StatusLabel.Text = 'Worksheet reload failed.';
+        end
+    end
+
+    function commitPatternSheet(filePath, sheetName, matrix, info)
+        if numel(matrix) > state.maxPatternCells
+            error('Excel matrix contains %d cells; the current limit is %d.', ...
+                numel(matrix), state.maxPatternCells);
+        end
+        recipeIds = unique(double(matrix(:)));
+        if numel(recipeIds) > state.maxPatternRecipes
+            error(['Excel matrix contains %d distinct Recipe IDs. ', ...
+                'The current limit is %d.'], ...
+                numel(recipeIds), state.maxPatternRecipes);
+        end
+
+        state.patternFilePath = string(filePath);
+        state.patternSheetName = string(sheetName);
+        state.patternMatrix = matrix;
+        state.patternInfo = info;
+        state.patternPoints = table();
+
+        ui.PatternFileLabel.Text = char(state.patternFilePath);
+        invalidatePatternPlan();
+        populatePatternRecipeRows(matrix);
+        updatePatternPreview();
+
+        [rowCount, columnCount] = size(matrix);
+        [ids, counts] = patternIdCounts(matrix);
+        idText = strjoin(compose('%g (%d)', ids, counts), ', ');
+        ui.PatternStatusLabel.Text = sprintf( ...
+            'Loaded %d x %d cells from "%s". Recipe IDs: %s.', ...
+            rowCount, columnCount, char(sheetName), char(idText));
+        ui.StatusLabel.Text = sprintf('Loaded Excel Recipe Pattern: %d x %d.', ...
+            rowCount, columnCount);
+    end
+
+    function populatePatternRecipeRows(matrix)
+        oldData = ui.PatternRecipeTable.Data;
+        [ids, counts] = patternIdCounts(matrix);
+        newData = cell(numel(ids), 11);
+
+        for rowIndex = 1:numel(ids)
+            id = ids(rowIndex);
+            oldRow = findPatternRecipeRow(oldData, id);
+            if isempty(oldRow)
+                name = sprintf('Recipe %g', id);
+                action = 'Process';
+                color = patternColorName(defaultPatternColor(id, rowIndex));
+                zShiftMm = 0;
+                power = nan;
+                dwellSeconds = nan;
+                exposures = 1;
+                pauseSeconds = 0;
+                if id == 0
+                    name = 'Background';
+                    action = 'Skip';
+                end
+            else
+                name = oldData{oldRow, 2};
+                action = oldData{oldRow, 3};
+                color = patternColorName(oldData{oldRow, 4});
+                zShiftMm = oldData{oldRow, 5};
+                power = oldData{oldRow, 6};
+                dwellSeconds = oldData{oldRow, 7};
+                exposures = oldData{oldRow, 8};
+                pauseSeconds = oldData{oldRow, 9};
+            end
+
+            if id == 0
+                action = 'Skip';
+            end
+            operationCount = patternOperationCount(action, counts(rowIndex), exposures);
+            newData(rowIndex, :) = { ...
+                id, name, action, color, zShiftMm, power, dwellSeconds, ...
+                exposures, pauseSeconds, counts(rowIndex), operationCount};
+        end
+
+        ui.PatternRecipeTable.Data = newData;
+        refreshPatternRecipeColorStyles();
+        updatePatternRecipeSummary();
+    end
+
+    function rowIndex = findPatternRecipeRow(data, id)
+        rowIndex = [];
+        if isempty(data)
+            return;
+        end
+        if istable(data)
+            if ismember('id', data.Properties.VariableNames)
+                rowIndex = find(double(data.id) == id, 1);
+            end
+            return;
+        end
+
+        for candidate = 1:size(data, 1)
+            value = patternCellNumber(data{candidate, 1}, 'Recipe ID', candidate);
+            if isfinite(value) && value == id
+                rowIndex = candidate;
+                return;
+            end
+        end
+    end
+
+    function [ids, counts] = patternIdCounts(matrix)
+        [ids, ~, groups] = unique(double(matrix(:)), 'sorted');
+        counts = accumarray(groups, 1);
+    end
+
+    function color = defaultPatternColor(id, paletteIndex)
+        [~, palette] = patternColorPalette();
+        if id == 0
+            color = char(palette(1));
+        elseif id == 1
+            color = char(palette(2));
+        elseif id == 2
+            color = char(palette(3));
+        else
+            colorIndex = mod(paletteIndex - 1, numel(palette)) + 1;
+            color = char(palette(colorIndex));
+        end
+    end
+
+    function names = patternColorNames()
+        [paletteNames, ~] = patternColorPalette();
+        names = reshape(cellstr(paletteNames), 1, []);
+    end
+
+    function [names, hexCodes] = patternColorPalette()
+        names = [ ...
+            "Blue", "Yellow", "Black", "Red", "Green", ...
+            "Orange", "Purple", "Cyan", "Pink", "White"];
+        hexCodes = [ ...
+            "#1657B8", "#F2C230", "#000000", "#E53935", "#43A047", ...
+            "#FB8C00", "#8E24AA", "#00ACC1", "#D81B60", "#FFFFFF"];
+    end
+
+    function name = patternColorName(colorValue)
+        [names, hexCodes] = patternColorPalette();
+        value = strtrim(string(colorValue));
+        colorIndex = find(strcmpi(value, names) | strcmpi(value, hexCodes), 1);
+        if isempty(colorIndex)
+            error('Color must be selected from the Color drop-down menu.');
+        end
+        name = char(names(colorIndex));
+    end
+
+    function hexCode = patternColorHex(colorValue)
+        [names, hexCodes] = patternColorPalette();
+        value = strtrim(string(colorValue));
+        colorIndex = find(strcmpi(value, names) | strcmpi(value, hexCodes), 1);
+        if isempty(colorIndex)
+            error('Color must be selected from the Color drop-down menu.');
+        end
+        hexCode = hexCodes(colorIndex);
+    end
+
+    function refreshPatternRecipeColorStyles()
+        try
+            removeStyle(ui.PatternRecipeTable);
+            data = ui.PatternRecipeTable.Data;
+            for rowIndex = 1:size(data, 1)
+                rgb = hexColorToRgb(patternColorHex(data{rowIndex, 4}));
+                luminance = dot(rgb, [0.2126, 0.7152, 0.0722]);
+                if luminance > 0.55
+                    fontColor = [0, 0, 0];
+                else
+                    fontColor = [1, 1, 1];
+                end
+                colorStyle = uistyle( ...
+                    'BackgroundColor', rgb, ...
+                    'FontColor', fontColor);
+                addStyle(ui.PatternRecipeTable, colorStyle, ...
+                    'cell', [rowIndex, 4]);
+            end
+        catch
+            % Color selection still works on MATLAB releases without table styles.
+        end
+    end
+
+    function onPatternRecipeEdited(~, ~)
+        invalidatePatternPlan();
+        try
+            data = ui.PatternRecipeTable.Data;
+            for rowIndex = 1:size(data, 1)
+                id = patternCellNumber(data{rowIndex, 1}, 'Recipe ID', rowIndex);
+                if id == 0
+                    data{rowIndex, 3} = 'Skip';
+                end
+                data{rowIndex, 11} = patternOperationCount( ...
+                    data{rowIndex, 3}, data{rowIndex, 10}, data{rowIndex, 8});
+            end
+            ui.PatternRecipeTable.Data = data;
+            refreshPatternRecipeColorStyles();
+            updatePatternRecipeSummary();
+            if ~isempty(state.patternMatrix)
+                updatePatternPreview();
+            end
+        catch err
+            ui.StatusLabel.Text = ['Invalid Recipe edit: ', err.message];
+        end
+    end
+
+    function onPatternSettingsChanged(~, ~)
+        updatePatternOrderControls();
+        invalidatePatternPlan();
+        if ~isempty(state.patternMatrix)
+            try
+                updatePatternPreview();
+            catch err
+                ui.StatusLabel.Text = ['Invalid Pattern settings: ', err.message];
+            end
+        end
+    end
+
+    function updatePatternOrderControls()
+        isRecipeGrouped = ...
+            string(ui.PatternTraversalDropDown.Value) == "recipe_by_recipe";
+        setPanelRow(patternDirectionGrid, 4, ui.PatternRecipeOrderRow, ...
+            'fit', isRecipeGrouped);
+        if isRecipeGrouped
+            patternGrid.RowHeight{4} = 126;
+            patternTabGrid.RowHeight{1} = 372;
+        else
+            patternGrid.RowHeight{4} = 94;
+            patternTabGrid.RowHeight{1} = 340;
+        end
+    end
+
+    function invalidatePatternPlan()
+        if ~isExcelPatternMode()
+            return;
+        end
+
+        state.previewFromLoadedPlan = false;
+        state.patternPoints = table();
+        if state.generatedSourceType == "excel_pattern"
+            state.generatedData = [];
+            state.generatedPlanTable = table();
+            state.generatedPrefix = '';
+            state.generatedSummary = struct([]);
+            state.generatedSourceType = "";
+            state.generatedGeneratorType = "";
+        end
+        ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
+        ui.DataTable.ColumnName = writingPlanColumnNames();
+        ui.FileHintLabel.Text = 'Configure all processed Recipes, then Generate Preview.';
+    end
+
+    function config = collectPatternConfig()
+        config = struct();
+        config.originXYZ = [ ...
+            validatePatternFiniteScalar(ui.PatternOriginXField.Value, 'Pattern Origin X'), ...
+            validatePatternFiniteScalar(ui.PatternOriginYField.Value, 'Pattern Origin Y'), ...
+            validatePatternFiniteScalar(ui.PatternOriginZField.Value, 'Pattern Origin Z')];
+        config.pitchXY = [ ...
+            validatePositiveScalar(ui.PatternPitchXField.Value, 'Pattern Pitch X'), ...
+            validatePositiveScalar(ui.PatternPitchYField.Value, 'Pattern Pitch Y')];
+        config.columnDirection = string(ui.PatternColumnDirectionDropDown.Value);
+        config.rowDirection = string(ui.PatternRowDirectionDropDown.Value);
+        config.matrixRowsTopToBottom = true;
+        config.order = string(ui.PatternTraversalDropDown.Value);
+        if config.order == "recipe_by_recipe"
+            customOrder = parsePatternRecipeOrder(ui.PatternRecipeOrderField.Value);
+            if ~isempty(customOrder)
+                config.recipeOrder = customOrder;
+            end
+        end
+        config.includeZero = false;
+    end
+
+    function recipeOrder = parsePatternRecipeOrder(rawValue)
+        rawText = strtrim(string(rawValue));
+        if ismissing(rawText) || strlength(rawText) == 0
+            recipeOrder = [];
+            return;
+        end
+
+        normalizedText = replace(rawText, ["，", "、", ";"], ",");
+        tokens = regexp(char(normalizedText), '[,\s]+', 'split');
+        tokens = string(tokens);
+        tokens = tokens(strlength(tokens) > 0);
+        recipeOrder = str2double(tokens);
+        if isempty(recipeOrder) || any(~isfinite(recipeOrder)) || ...
+                any(recipeOrder <= 0) || any(recipeOrder ~= fix(recipeOrder))
+            error(['Recipe order must contain positive integer IDs separated ', ...
+                'by commas or spaces, for example: 3, 2, 1.']);
+        end
+        if numel(unique(recipeOrder)) ~= numel(recipeOrder)
+            error('Recipe order cannot contain duplicate Recipe IDs.');
+        end
+        recipeOrder = double(recipeOrder(:));
+    end
+
+    function config = completePatternRecipeOrder(config, recipeTable)
+        if config.order ~= "recipe_by_recipe" || ...
+                ~isfield(config, 'recipeOrder') || isempty(config.recipeOrder)
+            return;
+        end
+
+        processIds = recipeTable.id( ...
+            recipeTable.action == "process" & recipeTable.id ~= 0);
+        customIds = double(config.recipeOrder(:));
+        if ~isequal(sort(customIds), sort(processIds))
+            error(['Custom Recipe order must list every processed nonzero Recipe ', ...
+                'exactly once. Expected IDs: %s.'], ...
+                char(strjoin(string(sort(processIds).'), ', ')));
+        end
+
+        skippedIds = recipeTable.id( ...
+            recipeTable.action == "skip" & recipeTable.id ~= 0);
+        config.recipeOrder = [customIds; sort(skippedIds)];
+    end
+
+    function value = validatePatternFiniteScalar(value, label)
+        if ~(isscalar(value) && isnumeric(value) && isfinite(value))
+            error('%s must be one finite number.', label);
+        end
+        value = double(value);
+    end
+
+    function recipeTable = patternRecipeTableFromUi(requireComplete)
+        if nargin < 1
+            requireComplete = true;
+        end
+
+        data = ui.PatternRecipeTable.Data;
+        rowCount = size(data, 1);
+        ids = zeros(rowCount, 1);
+        names = strings(rowCount, 1);
+        actions = strings(rowCount, 1);
+        colors = strings(rowCount, 1);
+        zShiftsMm = zeros(rowCount, 1);
+        powers = nan(rowCount, 1);
+        dwellSeconds = nan(rowCount, 1);
+        exposures = nan(rowCount, 1);
+        pauseSeconds = nan(rowCount, 1);
+        pixelCounts = zeros(rowCount, 1);
+
+        for rowIndex = 1:rowCount
+            ids(rowIndex) = patternCellNumber(data{rowIndex, 1}, 'Recipe ID', rowIndex);
+            names(rowIndex) = strtrim(string(data{rowIndex, 2}));
+            actions(rowIndex) = lower(strtrim(string(data{rowIndex, 3})));
+            colors(rowIndex) = patternColorHex(data{rowIndex, 4});
+            zShiftsMm(rowIndex) = patternCellNumber( ...
+                data{rowIndex, 5}, 'Z Shift', rowIndex);
+            powers(rowIndex) = patternCellNumber(data{rowIndex, 6}, 'Power', rowIndex);
+            dwellSeconds(rowIndex) = patternCellNumber(data{rowIndex, 7}, 'Dwell', rowIndex);
+            exposures(rowIndex) = patternCellNumber(data{rowIndex, 8}, 'Exposures', rowIndex);
+            pauseSeconds(rowIndex) = patternCellNumber(data{rowIndex, 9}, 'Pause', rowIndex);
+            pixelCounts(rowIndex) = patternCellNumber(data{rowIndex, 10}, 'Pixel count', rowIndex);
+
+            if actions(rowIndex) == "process"
+                actions(rowIndex) = "process";
+            elseif actions(rowIndex) == "skip"
+                actions(rowIndex) = "skip";
+            else
+                error('Recipe %g Action must be Process or Skip.', ids(rowIndex));
+            end
+        end
+
+        if any(~isfinite(ids) | ids < 0 | abs(ids - round(ids)) > 1e-9)
+            error('Recipe IDs must be finite nonnegative integers.');
+        end
+        if numel(unique(ids)) ~= numel(ids)
+            error('Recipe IDs must be unique.');
+        end
+        actions(ids == 0) = "skip";
+        processMask = actions == "process";
+        if any(~isfinite(zShiftsMm(processMask)))
+            error('Every processed Recipe must define a finite Z Shift value.');
+        end
+
+        if ~isempty(state.patternMatrix)
+            matrixIds = unique(double(state.patternMatrix(:)), 'sorted');
+            if ~isequal(ids(:), matrixIds(:))
+                error('Recipe table IDs no longer match the imported matrix. Reload the worksheet.');
+            end
+        end
+
+        if requireComplete
+            if ~any(processMask & pixelCounts > 0)
+                error('At least one Recipe containing pixels must use Action=Process.');
+            end
+            if any(strlength(names(processMask)) == 0)
+                error('Every processed Recipe must have a name.');
+            end
+            if any(~isfinite(powers(processMask)))
+                error('Every processed Recipe must define a finite Power value.');
+            end
+            if any(~isfinite(dwellSeconds(processMask)) | dwellSeconds(processMask) < 0)
+                error('Every processed Recipe must define a nonnegative Dwell value.');
+            end
+            if any(~isfinite(exposures(processMask)) | exposures(processMask) < 1 | ...
+                    abs(exposures(processMask) - round(exposures(processMask))) > 1e-9)
+                error('Every processed Recipe must define a positive integer Exposures value.');
+            end
+            if any(~isfinite(pauseSeconds(processMask)) | pauseSeconds(processMask) < 0)
+                error('Every processed Recipe must define a nonnegative Pause value.');
+            end
+        end
+
+        recipeTable = table( ...
+            ids, names, actions, colors, zShiftsMm, powers, dwellSeconds, ...
+            exposures, pauseSeconds, pixelCounts, ...
+            'VariableNames', {'id', 'name', 'action', 'preview_color', ...
+                'z_shift_mm', 'power', 'dwell_s', 'exposures', 'pause_s', ...
+                'pixel_count'});
+    end
+
+    function value = patternCellNumber(cellValue, label, rowIndex)
+        if isnumeric(cellValue) || islogical(cellValue)
+            if ~isscalar(cellValue)
+                error('%s in Recipe row %d must be one number.', label, rowIndex);
+            end
+            value = double(cellValue);
+            return;
+        end
+
+        textValue = strtrim(string(cellValue));
+        if ismissing(textValue) || strlength(textValue) == 0
+            value = nan;
+            return;
+        end
+        value = str2double(textValue);
+        if isnan(value) && lower(textValue) ~= "nan"
+            error('%s in Recipe row %d must be numeric.', label, rowIndex);
+        end
+    end
+
+    function operationCount = patternOperationCount(action, pixelCount, exposures)
+        pixelCount = patternCellNumber(pixelCount, 'Pixel count', 0);
+        exposures = patternCellNumber(exposures, 'Exposures', 0);
+        if lower(strtrim(string(action))) ~= "process"
+            operationCount = 0;
+        elseif isfinite(pixelCount) && isfinite(exposures) && ...
+                exposures >= 1 && abs(exposures - round(exposures)) <= 1e-9
+            operationCount = pixelCount * round(exposures);
+        else
+            operationCount = nan;
+        end
+    end
+
+    function updatePatternRecipeSummary()
+        data = ui.PatternRecipeTable.Data;
+        if isempty(data)
+            ui.PatternRecipeSummaryLabel.Text = 'No Recipe IDs loaded.';
+            return;
+        end
+
+        parts = strings(size(data, 1), 1);
+        totalOperations = 0;
+        operationsKnown = true;
+        for rowIndex = 1:size(data, 1)
+            id = patternCellNumber(data{rowIndex, 1}, 'Recipe ID', rowIndex);
+            pixels = patternCellNumber(data{rowIndex, 10}, 'Pixel count', rowIndex);
+            operations = patternCellNumber(data{rowIndex, 11}, 'Operations', rowIndex);
+            parts(rowIndex) = sprintf('ID %g: %d px', id, pixels);
+            if isfinite(operations)
+                totalOperations = totalOperations + operations;
+            else
+                operationsKnown = false;
+            end
+        end
+        if operationsKnown
+            suffix = sprintf(' | Planned operations: %d', totalOperations);
+        else
+            suffix = ' | Planned operations: incomplete Recipe settings';
+        end
+        ui.PatternRecipeSummaryLabel.Text = [char(strjoin(parts, ' | ')), suffix];
+    end
+
+    function generatePatternPlan()
+        if isempty(state.patternMatrix)
+            error('Choose and load an Excel Recipe Pattern workbook first.');
+        end
+
+        config = collectPatternConfig();
+        recipeTable = patternRecipeTableFromUi(true);
+        config = completePatternRecipeOrder(config, recipeTable);
+        processMask = recipeTable.action == "process";
+        estimatedOperations = sum( ...
+            recipeTable.pixel_count(processMask) .* round(recipeTable.exposures(processMask)));
+        if estimatedOperations > state.maxPatternPlanRows
+            error(['This Recipe configuration would create %d plan rows. ', ...
+                'The current safety limit is %d rows.'], ...
+                estimatedOperations, state.maxPatternPlanRows);
+        end
+
+        planTable = writing_plan_v2_from_recipe_matrix( ...
+            state.patternMatrix, recipeTable, config);
+        if height(planTable) > state.maxPatternPlanRows
+            error('Generated plan exceeds the current %d-row safety limit.', ...
+                state.maxPatternPlanRows);
+        end
+
+        points = recipe_matrix_to_points(state.patternMatrix, config);
+        points = applyPatternRecipeZShifts(points, recipeTable);
+
+        [rowCount, columnCount] = size(state.patternMatrix);
+        [~, baseName] = fileparts(char(state.patternFilePath));
+        prefix = sprintf('pattern_%s_%s_%dx%d', ...
+            patternFileToken(baseName), ...
+            patternFileToken(char(state.patternSheetName)), ...
+            rowCount, columnCount);
+
+        state.generatedData = [points.x_mm, points.y_mm, points.z_mm, points.recipe_id];
+        state.generatedPlanTable = planTable;
+        state.generatedPrefix = prefix;
+        state.generatedSummary = struct( ...
+            'pointCount', height(points), ...
+            'sourcePointCount', numel(state.patternMatrix), ...
+            'operationCount', height(planTable));
+        state.previewFromLoadedPlan = false;
+        state.generatedSourceType = "excel_pattern";
+        state.generatedGeneratorType = currentGenerationContext();
+        state.patternPoints = points;
+
+        updatePatternPreview();
+        ui.StatusLabel.Text = sprintf( ...
+            'Generated Excel Recipe Pattern: %d source points, %d operations.', ...
+            height(points), height(planTable));
+    end
+
+    function token = patternFileToken(value)
+        token = regexprep(char(value), '[^A-Za-z0-9]+', '_');
+        token = regexprep(token, '^_+|_+$', '');
+        if isempty(token)
+            token = 'excel';
+        end
+        if numel(token) > 60
+            token = token(1:60);
+        end
+    end
+
+    function updatePatternPreview()
+        if isExcelPatternMode()
+            state.previewFromLoadedPlan = false;
+            configurePreviewMode(true);
+        end
+        if isempty(state.patternMatrix)
+            showEmptyPatternPreview();
+            return;
+        end
+
+        if string(ui.PreviewModeDropDown.Value) == "Point Cloud"
+            drawPatternPointCloud();
+        else
+            drawPatternRecipeMap();
+        end
+
+        [rowCount, columnCount] = size(state.patternMatrix);
+        [ids, counts] = patternIdCounts(state.patternMatrix);
+        countText = strjoin(compose('%g:%d', ids, counts), ', ');
+
+        mappingStatus = 'Recipe settings incomplete.';
+        activePointCount = 0;
+        estimatedOperations = nan;
+        try
+            recipeTable = patternRecipeTableFromUi(false);
+            processMask = recipeTable.action == "process";
+            activePointCount = sum(recipeTable.pixel_count(processMask));
+            validExposureMask = processMask & isfinite(recipeTable.exposures) & ...
+                recipeTable.exposures >= 1 & ...
+                abs(recipeTable.exposures - round(recipeTable.exposures)) <= 1e-9;
+            if all(~processMask | validExposureMask)
+                estimatedOperations = sum( ...
+                    recipeTable.pixel_count(processMask) .* round(recipeTable.exposures(processMask)));
+            end
+            patternRecipeTableFromUi(true);
+            mappingStatus = 'Recipe settings complete.';
+        catch
+            % The Recipe map remains useful while process parameters are incomplete.
+        end
+
+        try
+            config = collectPatternConfig();
+            xSpan = (columnCount - 1) * config.pitchXY(1);
+            ySpan = (rowCount - 1) * config.pitchXY(2);
+            geometryText = sprintf('Span X %.6g mm, Y %.6g mm', xSpan, ySpan);
+        catch
+            geometryText = 'Invalid origin or pixel pitch';
+        end
+
+        if isfinite(estimatedOperations)
+            operationText = sprintf('%d planned operations', estimatedOperations);
+        else
+            operationText = 'operation count pending';
+        end
+        if state.generatedSourceType == "excel_pattern" && ...
+                ~isempty(state.generatedPlanTable)
+            minimumProgrammedTime = sum(state.generatedPlanTable.dwell_s, 'omitnan') + ...
+                sum(state.generatedPlanTable.pause_s, 'omitnan');
+            generatedText = sprintf( ...
+                'Generated %d rows; programmed dwell + pause %.3f s.', ...
+                height(state.generatedPlanTable), minimumProgrammedTime);
+            previewRows = min(state.tablePreviewRowLimit, height(state.generatedPlanTable));
+            ui.DataTable.Data = state.generatedPlanTable(1:previewRows, :);
+            ui.DataTable.ColumnName = state.generatedPlanTable.Properties.VariableNames;
+            ui.DataTable.ColumnEditable = false(1, width(state.generatedPlanTable));
+            ui.FileHintLabel.Text = ['Suggested filename: ', ...
+                state.generatedPrefix, '_writing_plan.csv'];
+        else
+            generatedText = 'Writing Plan has not been generated.';
+            ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
+            ui.DataTable.ColumnName = writingPlanColumnNames();
+            ui.FileHintLabel.Text = 'Configure all processed Recipes, then Generate Preview.';
+        end
+
+        ui.SummaryLabel.Text = sprintf([ ...
+            'Excel Pattern: %d rows x %d columns | IDs %s\n', ...
+            'Active pixels: %d | %s | %s\n', ...
+            '%s | %s'], ...
+            rowCount, columnCount, char(countText), ...
+            activePointCount, operationText, mappingStatus, ...
+            geometryText, generatedText);
+    end
+
+    function showEmptyPatternPreview()
+        cla(ui.PreviewAxes);
+        text(ui.PreviewAxes, 0.5, 0.5, ...
+            'Choose an .xlsx Recipe ID matrix to begin.', ...
+            'Units', 'normalized', ...
+            'HorizontalAlignment', 'center', ...
+            'Color', [0.35, 0.35, 0.35]);
+        ui.PreviewAxes.XLabel.String = '';
+        ui.PreviewAxes.YLabel.String = '';
+        ui.PreviewAxes.ZLabel.String = '';
+        if string(ui.PreviewModeDropDown.Value) == "Point Cloud"
+            title(ui.PreviewAxes, 'Recipe Point Cloud');
+        else
+            title(ui.PreviewAxes, 'Recipe Map');
+        end
+        grid(ui.PreviewAxes, 'off');
+        view(ui.PreviewAxes, 2);
+        if isgraphics(ui.PowerColorbar)
+            ui.PowerColorbar.Visible = 'off';
+        end
+        ui.SummaryLabel.Text = ['No Excel Recipe Pattern loaded. Choose an .xlsx workbook, ', ...
+            'select a worksheet, then configure its Recipes.'];
+        ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
+        ui.DataTable.ColumnName = writingPlanColumnNames();
+        ui.FileHintLabel.Text = 'Choose an Excel Recipe Pattern workbook.';
+        ui.StatusLabel.Text = 'Excel Pattern mode: no workbook loaded.';
+    end
+
+    function drawPatternRecipeMap()
+        matrix = double(state.patternMatrix);
+        [ids, ~] = patternIdCounts(matrix);
+        indexed = zeros(size(matrix));
+        for idIndex = 1:numel(ids)
+            indexed(matrix == ids(idIndex)) = idIndex;
+        end
+
+        config = collectPatternConfig();
+        displayIndexed = indexed;
+        xCoordinates = config.originXYZ(1) + ...
+            directionSign(config.columnDirection, 'X') .* ...
+            (0:size(matrix, 2) - 1) .* config.pitchXY(1);
+        yCoordinates = config.originXYZ(2) + ...
+            directionSign(config.rowDirection, 'Y') .* ...
+            (0:size(matrix, 1) - 1) .* config.pitchXY(2);
+        if config.columnDirection == "-X"
+            displayIndexed = fliplr(displayIndexed);
+        end
+        % Excel image rows run top-to-bottom. Flip only the display raster so
+        % the source image stays upright while physical traversal can begin
+        % at the lower-left and advance toward +Y.
+        displayIndexed = flipud(displayIndexed);
+
+        xDisplay = patternDisplayExtent(xCoordinates, config.pitchXY(1));
+        yDisplay = patternDisplayExtent(yCoordinates, config.pitchXY(2));
+        colors = patternColorsForIds(ids);
+
+        cla(ui.PreviewAxes);
+        imagesc(ui.PreviewAxes, xDisplay, yDisplay, displayIndexed);
+        ui.PreviewAxes.XDir = 'normal';
+        ui.PreviewAxes.YDir = 'normal';
+        ui.PreviewAxes.ZDir = 'normal';
+        ui.PreviewAxes.XLabel.String = 'X (mm)';
+        ui.PreviewAxes.YLabel.String = 'Y (mm)';
+        ui.PreviewAxes.ZLabel.String = '';
+        title(ui.PreviewAxes, sprintf('Recipe Map — %s', char(state.patternSheetName)));
+        axis(ui.PreviewAxes, 'image');
+        axis(ui.PreviewAxes, 'tight');
+        view(ui.PreviewAxes, 2);
+        colormap(ui.PreviewAxes, colors);
+        clim(ui.PreviewAxes, [0.5, numel(ids) + 0.5]);
+        applyPatternColorbar(ids);
+    end
+
+    function drawPatternPointCloud()
+        config = collectPatternConfig();
+        recipeTable = patternRecipeTableFromUi(false);
+        config = completePatternRecipeOrder(config, recipeTable);
+        points = state.patternPoints;
+        if isempty(points)
+            points = recipe_matrix_to_points(state.patternMatrix, config);
+            points = applyPatternRecipeZShifts(points, recipeTable);
+        end
+
+        cla(ui.PreviewAxes);
+        if isempty(points)
+            text(ui.PreviewAxes, 0.5, 0.5, ...
+                'No processed Recipe points to preview.', ...
+                'Units', 'normalized', ...
+                'HorizontalAlignment', 'center');
+            if isgraphics(ui.PowerColorbar)
+                ui.PowerColorbar.Visible = 'off';
+            end
+            title(ui.PreviewAxes, 'Recipe Point Cloud');
+            return;
+        end
+
+        plotIdx = localPreviewIndices(height(points), state.maxPlotPreviewPoints);
+        plotPoints = points(plotIdx, :);
+        ids = unique(points.recipe_id, 'sorted');
+        [~, colorIndex] = ismember(plotPoints.recipe_id, ids);
+        colors = patternColorsForIds(ids);
+        scatter3(ui.PreviewAxes, ...
+            plotPoints.x_mm, plotPoints.y_mm, plotPoints.z_mm, ...
+            12, colorIndex, 'filled');
+        ui.PreviewAxes.XLabel.String = 'X (mm)';
+        ui.PreviewAxes.YLabel.String = 'Y (mm)';
+        ui.PreviewAxes.ZLabel.String = 'Z (mm)';
+        title(ui.PreviewAxes, 'Recipe Point Cloud');
+        grid(ui.PreviewAxes, 'on');
+        colormap(ui.PreviewAxes, colors);
+        clim(ui.PreviewAxes, [0.5, numel(ids) + 0.5]);
+        applyPatternColorbar(ids);
+        applyPreviewLimits3D(ui.PreviewAxes, ...
+            points.x_mm, points.y_mm, points.z_mm);
+    end
+
+    function points = applyPatternRecipeZShifts(points, recipeTable)
+        [mappingFound, mappingRows] = ismember(points.recipe_id, recipeTable.id);
+        processMask = false(height(points), 1);
+        processMask(mappingFound) = ...
+            recipeTable.action(mappingRows(mappingFound)) == "process";
+        points = points(processMask, :);
+        mappingRows = mappingRows(processMask);
+        if isempty(points)
+            return;
+        end
+
+        zShiftsMm = recipeTable.z_shift_mm(mappingRows);
+        if any(~isfinite(zShiftsMm))
+            error('Every processed Recipe must define a finite Z Shift value.');
+        end
+        points.z_mm = points.z_mm + zShiftsMm;
+    end
+
+    function signValue = directionSign(direction, axisName)
+        direction = upper(string(direction));
+        if direction == "+" + upper(string(axisName))
+            signValue = 1;
+        elseif direction == "-" + upper(string(axisName))
+            signValue = -1;
+        else
+            error('Unsupported pattern direction "%s".', direction);
+        end
+    end
+
+    function extent = patternDisplayExtent(coordinates, pitch)
+        if isscalar(coordinates)
+            extent = coordinates(1) + [-0.5, 0.5] .* pitch;
+        else
+            extent = [min(coordinates), max(coordinates)];
+        end
+    end
+
+    function colors = patternColorsForIds(ids)
+        data = ui.PatternRecipeTable.Data;
+        colors = zeros(numel(ids), 3);
+        for idIndex = 1:numel(ids)
+            rowIndex = findPatternRecipeRow(data, ids(idIndex));
+            if isempty(rowIndex)
+                colorText = defaultPatternColor(ids(idIndex), idIndex);
+            else
+                try
+                    colorText = patternColorHex(data{rowIndex, 4});
+                catch
+                    colorText = defaultPatternColor(ids(idIndex), idIndex);
+                end
+            end
+            colors(idIndex, :) = hexColorToRgb(colorText);
+        end
+    end
+
+    function rgb = hexColorToRgb(colorText)
+        colorText = char(colorText);
+        rgb = [ ...
+            hex2dec(colorText(2:3)), ...
+            hex2dec(colorText(4:5)), ...
+            hex2dec(colorText(6:7))] ./ 255;
+    end
+
+    function applyPatternColorbar(ids)
+        if ~isgraphics(ui.PowerColorbar)
+            ui.PowerColorbar = colorbar(ui.PreviewAxes);
+        end
+        ui.PowerColorbar.Visible = 'on';
+        ui.PowerColorbar.Label.String = 'Recipe ID';
+        if numel(ids) <= 20
+            tickIndexes = 1:numel(ids);
+        else
+            tickIndexes = unique(round(linspace(1, numel(ids), 20)));
+        end
+        ui.PowerColorbar.Ticks = tickIndexes;
+        ui.PowerColorbar.TickLabels = cellstr(string(ids(tickIndexes)));
+    end
+
     function onGenerate(~, ~)
         try
+            if isExcelPatternMode()
+                generatePatternPlan();
+                return;
+            end
+
             params = collectParams();
             [data, prefix, summary] = generate_point_cloud(params);
             state.generatedData = data;
             state.generatedPrefix = prefix;
             state.generatedSummary = summary;
             state.previewFromLoadedPlan = false;
+            state.generatedSourceType = "procedural";
+            state.generatedGeneratorType = currentGenerationContext();
             refreshPlanFromCurrentSettings();
             updatePreview(prefix, summary, state.generatedPlanTable);
             ui.StatusLabel.Text = sprintf('Generated %d operations.', height(state.generatedPlanTable));
@@ -975,6 +2218,8 @@ applyCompactFonts(fig);
             state.generatedPrefix = prefix;
             state.generatedSummary = summary;
             state.previewFromLoadedPlan = true;
+            state.generatedSourceType = "loaded_plan";
+            state.generatedGeneratorType = currentGenerationContext();
             state.lastSaveFolder = folderName;
 
             updatePreview(prefix, summary, planTable);
@@ -988,14 +2233,25 @@ applyCompactFonts(fig);
 
     function onSave(~, ~)
         try
-            if isempty(state.generatedData)
+            currentGeneratorType = currentGenerationContext();
+            needsGenerate = isempty(state.generatedPlanTable) || ...
+                (state.generatedSourceType == "loaded_plan" && ...
+                ~state.previewFromLoadedPlan);
+            if state.generatedSourceType ~= "loaded_plan" && ...
+                    state.generatedGeneratorType ~= currentGeneratorType
+                needsGenerate = true;
+            end
+
+            if needsGenerate
                 onGenerate();
-                if isempty(state.generatedData)
+                if isempty(state.generatedPlanTable) || ...
+                        state.generatedSourceType == "loaded_plan" || ...
+                        state.generatedGeneratorType ~= currentGeneratorType
                     return;
                 end
             end
 
-            if ~state.previewFromLoadedPlan
+            if state.generatedSourceType == "procedural"
                 refreshPlanFromCurrentSettings();
             end
 
@@ -1299,10 +2555,14 @@ applyCompactFonts(fig);
             planTable = state.generatedPlanTable;
         end
 
+        configurePreviewMode(false);
         plotIdx = localPreviewIndices(height(planTable), state.maxPlotPreviewPoints);
         plotTable = planTable(plotIdx, :);
 
         cla(ui.PreviewAxes);
+        ui.PreviewAxes.XLabel.String = 'X (mm)';
+        ui.PreviewAxes.YLabel.String = 'Y (mm)';
+        ui.PreviewAxes.ZLabel.String = 'Z (mm, smaller = deeper)';
         hold(ui.PreviewAxes, 'on');
 
         if height(plotTable) > 1
@@ -1328,6 +2588,7 @@ applyCompactFonts(fig);
         hold(ui.PreviewAxes, 'off');
         grid(ui.PreviewAxes, 'on');
         colormap(ui.PreviewAxes, turbo);
+        clim(ui.PreviewAxes, 'auto');
         title(ui.PreviewAxes, 'Writing Plan Preview');
         [boundsX, boundsY, boundsZ] = planPreviewBounds(planTable);
         applyPreviewLimits3D(ui.PreviewAxes, boundsX, boundsY, boundsZ);
@@ -1335,7 +2596,14 @@ applyCompactFonts(fig);
         if ~isgraphics(ui.PowerColorbar)
             ui.PowerColorbar = colorbar(ui.PreviewAxes);
         end
+        ui.PowerColorbar.Visible = 'on';
         ui.PowerColorbar.Label.String = 'Power';
+        try
+            ui.PowerColorbar.TicksMode = 'auto';
+            ui.PowerColorbar.TickLabelsMode = 'auto';
+        catch
+            % Older MATLAB releases can omit automatic colorbar mode properties.
+        end
 
         previewRows = min(state.tablePreviewRowLimit, height(planTable));
         ui.DataTable.Data = planTable(1:previewRows, :);
@@ -1656,7 +2924,7 @@ end
 
 function tips = parameterTooltips()
 tips = struct();
-tips.latticeType = 'Choose the lattice generator: Cartesian is a regular grid; Hex/HCP use staggered layers; Staircase builds a depth/power matrix; Segmented Grating builds a two-period 1D QPM pattern; Z Push steps one point toward -Z; Hexagon Cut creates six continuous cutting edges; Hexagon Release Cut adds hatch and concentric release rings; Hexagon Release Cut Array repeats that cut on selected honeycomb cells; Circle Release Cut creates grouped continuous circular rings.';
+tips.latticeType = 'Choose the procedural geometry used by the Generator workflow.';
 tips.counts = { ...
     'Number of generated points along X; must be a positive integer.', ...
     'Number of generated points along Y; must be a positive integer.', ...
@@ -1796,6 +3064,28 @@ tips.scanLeadOut = ['Laser-off travel immediately after the exposed scan, in mm.
     'It uses the scan speed and does not change the exposed scan length or anchor.'];
 tips.pauseSeconds = ['Settling time after the stage reaches a point or the start of a scan group, ', ...
     'including any lead-in, before exposure or scanning, in seconds.'];
+tips.patternFile = ['Choose a macro-free .xlsx workbook. Select the worksheet containing only the rectangular ', ...
+    'Recipe ID matrix; formatting and conditional colors are ignored.'];
+tips.patternOrigin = { ...
+    'X coordinate assigned to the first column at the traversal origin, in mm.', ...
+    'Y coordinate of the first traversed image row: the bottom row for +Y or top row for -Y.', ...
+    'Z coordinate assigned to every point in the imported 2D pattern, in mm.'};
+tips.patternPitch = { ...
+    'Physical X spacing between adjacent Excel columns, in mm.', ...
+    'Physical Y spacing between adjacent Excel rows, in mm.'};
+tips.patternColumnDirection = 'Choose whether increasing Excel column number moves in +X or -X.';
+tips.patternRowDirection = ['Bottom-to-top places the pattern origin at the lower-left and writes image rows ', ...
+    'toward +Y without flipping the image. Select top-to-bottom to start at the upper-left and move toward -Y.'];
+tips.patternTraversal = ['Serpentine reverses adjacent rows to reduce travel; row-major always uses the ', ...
+    'same column direction; recipe-by-recipe completes each nonzero Recipe ID in ascending order, ', ...
+    'using serpentine order within each Recipe.'];
+tips.patternRecipeOrder = ['Used only for recipe-by-recipe ordering. Leave blank for ascending Recipe ID, ', ...
+    'or enter every processed nonzero Recipe exactly once, for example: 3, 2, 1. ', ...
+    'Recipe 0 and Recipes set to Skip are omitted.'];
+tips.patternRecipes = ['Recipe 0 is always skipped. Processed IDs map to per-point Z shift, power, dwell, ', ...
+    'exposure count, and pause values. Positive Z Shift moves up (+Z); negative moves down/deeper (-Z). ', ...
+    'Choose one of the 10 preview colors from the Color menu; colors do not affect laser execution.'];
+tips.previewMode = 'Excel Pattern mode can show either the categorical Recipe map or the generated point cloud.';
 tips.previewRows = 'Maximum number of plan rows shown in the table; saving still writes every row.';
 end
 function [rowPanel, dropdown] = createDropdownRow(parent, labelText, items, defaultValue, callback, itemData, tooltipText)

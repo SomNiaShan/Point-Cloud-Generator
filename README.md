@@ -15,6 +15,39 @@ Standalone MATLAB point-cloud generator used by the laser writing workflow.
 2. Make sure the Current Folder is the repository root.
 3. Run `point_cloud_generator_app`.
 
+## Excel Recipe Patterns
+
+Open the top-level `Excel Pattern` tab to convert an `.xlsx` worksheet into
+point-dwell Writing Plan v2 rows. This workflow is independent of the
+procedural shapes listed under `Generator Type`.
+
+- The worksheet must contain one complete rectangular matrix of finite,
+  nonnegative integer Recipe IDs without headers.
+- Blank rows and columns around the matrix are ignored. Blank cells inside
+  the matrix, text, negative IDs, and fractional IDs are rejected.
+- Recipe ID `0` is always skipped. Every processed nonzero ID maps to its
+  own Z shift, power, dwell time, exposure count, and pre-write pause.
+- `Z Shift (mm)` is added to the pattern's base Origin Z for that Recipe.
+  Positive values move toward +Z (up); negative values move toward -Z
+  (down/deeper).
+- Excel formatting and conditional colors are ignored. Preview colors are
+  selected from a 10-color drop-down menu in the app and stored as `#RRGGBB`.
+- The configured origin is the lower-left image corner by default. Writing
+  starts with the bottom Excel image row and advances upward toward +Y, while
+  Excel row 1 remains at the top so the image is not vertically flipped.
+  Column and row directions can still be independently reversed, and writing
+  order can be row-major, serpentine, or recipe-by-recipe. Recipe-by-recipe
+  uses serpentine point order within each Recipe. Leave its `Recipe order`
+  field blank to process IDs in ascending order, or enter every processed
+  nonzero ID in a custom sequence such as `3, 2, 1`. Recipe 0 and Recipes
+  configured to Skip are omitted from this field.
+- The current import limit is 1,000,000 matrix cells, 256 distinct Recipe
+  IDs, and 2,000,000 generated Writing Plan rows.
+
+Pattern mode currently produces point-dwell operations only. Supporting
+additional per-Recipe hardware settings such as pulse frequency or pulse
+width requires a future Writing Plan schema and executor update.
+
 ## Packaging
 
 To build a standalone Windows application:
