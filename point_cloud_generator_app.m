@@ -1,5 +1,6 @@
-function fig = point_cloud_generator_app()
+function [fig, appUi] = point_cloud_generator_app()
 %POINT_CLOUD_GENERATOR_APP App version of the point cloud generator.
+% The optional second output exposes UI handles for automated integration tests.
 
 appFolder = fileparts(mfilename('fullpath'));
 supportFolder = fullfile(appFolder, 'support_files');
@@ -15,6 +16,12 @@ state.generatedSummary = struct([]);
 state.previewFromLoadedPlan = false;
 state.generatedSourceType = "";
 state.generatedGeneratorType = "";
+state.generatedRecipeConfig = struct([]);
+state.generatorWritingDrafts = struct();
+state.activeGeneratorType = "";
+state.defaultWritingDraft = struct([]);
+state.generatorCallbacksBound = false;
+state.generatorPlanDirty = true;
 state.lastSaveFolder = appFolder;
 state.maxTablePreviewRows = 5000;
 state.tablePreviewRowLimit = 200;
@@ -58,24 +65,39 @@ controlTabs = uitabgroup(controlPanelGrid);
 controlTabs.Layout.Row = 1;
 controlTabs.Layout.Column = 1;
 latticeTab = uitab(controlTabs, 'Title', 'Generator');
+latticeTab.Tag = 'generator-tab';
 latticeTab.Scrollable = 'on';
-powerOrderTab = uitab(controlTabs, 'Title', 'Writing Settings');
-powerOrderTab.Scrollable = 'on';
 patternTab = uitab(controlTabs, 'Title', 'Excel Pattern');
+patternTab.Tag = 'excel-pattern-tab';
 patternTab.Scrollable = 'on';
 
-latticeTabGrid = uigridlayout(latticeTab, [46, 1]);
-latticeTabGrid.RowHeight = repmat({'fit'}, 1, 46);
+latticeTabGrid = uigridlayout(latticeTab, [47, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 47);
 latticeTabGrid.ColumnWidth = {'1x'};
 latticeTabGrid.Padding = [6, 6, 6, 6];
 latticeTabGrid.RowSpacing = 4;
 latticeTabGrid.Scrollable = 'on';
 
-powerOrderGrid = uigridlayout(powerOrderTab, [3, 1]);
-powerOrderGrid.RowHeight = {'fit', 'fit', 'fit'};
+writingRecipePanel = uipanel(latticeTabGrid, 'Title', 'Writing Recipe');
+writingRecipePanel.Layout.Row = 47;
+writingRecipePanel.Layout.Column = 1;
+
+powerOrderGrid = uigridlayout(writingRecipePanel, [4, 1]);
+powerOrderGrid.RowHeight = {'fit', 'fit', 'fit', 'fit'};
 powerOrderGrid.ColumnWidth = {'1x'};
 powerOrderGrid.RowSpacing = 6;
 powerOrderGrid.Padding = [6, 6, 6, 6];
+
+writingProfilePanel = uipanel(powerOrderGrid, 'Title', 'Effective Writing Profile');
+writingProfilePanel.Layout.Row = 1;
+writingProfilePanel.Layout.Column = 1;
+writingProfileGrid = uigridlayout(writingProfilePanel, [1, 1]);
+writingProfileGrid.Padding = [6, 4, 6, 4];
+writingProfileLabel = uilabel(writingProfileGrid, ...
+    'Text', 'Writing profile follows the selected Generator Type.', ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.2, 0.2, 0.2]);
+writingProfileLabel.Tag = 'writing-profile-summary';
 
 patternTabGrid = uigridlayout(patternTab, [2, 1]);
 patternTabGrid.RowHeight = {340, '1x'};
@@ -85,6 +107,11 @@ patternTabGrid.Padding = [6, 6, 6, 6];
 patternTabGrid.Scrollable = 'on';
 
 ui = struct();
+ui.GeneratorTab = latticeTab;
+ui.PatternTab = patternTab;
+ui.WritingRecipePanel = writingRecipePanel;
+ui.WritingProfilePanel = writingProfilePanel;
+ui.WritingProfileLabel = writingProfileLabel;
 
 latticeGrid = latticeTabGrid;
 
@@ -96,6 +123,7 @@ latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Scan Parameter Matr
     latticeGrid, 'Generator Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
     latticeTypeItems, tips.latticeType);
 ui.LatticeTypeRow.Layout.Row = 1;
+ui.LatticeTypeDropDown.Tag = 'generator-type';
 
 [ui.CountsPanel, countFields] = createValuePanel( ...
     latticeGrid, 'Counts', {'Points X', 'Points Y', 'Points Z'}, [20, 20, 5], tips.counts);
@@ -171,7 +199,7 @@ ui.ScanTestHintLabel = uilabel(latticeGrid, ...
     'Text', ['Parameter layout: the configured scan-speed sequence maps from the first row toward +Y, ', ...
         'while power changes by column (+X). ', ...
         'Each matrix cell is one region containing the configured Nx-by-Ny scan anchors. ', ...
-        'Laser-off lead-in/out defaults to 0.005 mm and can be adjusted under Writing Settings.'], ...
+        'Laser-off lead-in/out defaults to 0.005 mm and can be adjusted in the Writing Recipe section below.'], ...
     'WordWrap', 'on', ...
     'FontColor', [0.25, 0.25, 0.25]);
 ui.ScanTestHintLabel.Layout.Row = 38;
@@ -611,7 +639,8 @@ for patternField = [patternOriginFields, patternPitchFields]
 end
 
 ui.PowerPanel = uipanel(powerOrderGrid, 'Title', 'Power');
-ui.PowerPanel.Layout.Row = 1;
+ui.PowerPanel.Tag = 'writing-power-panel';
+ui.PowerPanel.Layout.Row = 2;
 ui.PowerPanel.Layout.Column = 1;
 
 powerGrid = uigridlayout(ui.PowerPanel, [5, 1]);
@@ -623,9 +652,11 @@ powerGrid.Padding = [6, 6, 6, 6];
     powerGrid, 'Power Mode', {'Fixed Value', 'Custom Formula', 'Linear Points'}, 'Linear points', @onPowerModeChanged, ...
     {'Fixed value', 'Custom formula', 'Linear points'}, tips.powerMode);
 ui.PowerModeRow.Layout.Row = 1;
+ui.PowerModeDropDown.Tag = 'power-mode';
 
 [ui.FixedPowerRow, ui.FixedPowerField] = createNumericRow(powerGrid, 'Fixed Power', 10, tips.fixedPower);
 ui.FixedPowerRow.Layout.Row = 2;
+ui.FixedPowerField.Tag = 'fixed-power';
 
 [ui.PowerFormulaRow, ui.PowerFormulaField] = createTextRow(powerGrid, 'Formula', '1+5*z', tips.powerFormula);
 ui.PowerFormulaRow.Layout.Row = 3;
@@ -650,7 +681,7 @@ ui.PowerHintLabel.Layout.Row = 5;
 ui.PowerHintLabel.Layout.Column = 1;
 
 ui.OrderingPanel = uipanel(powerOrderGrid, 'Title', 'Writing Order');
-ui.OrderingPanel.Layout.Row = 2;
+ui.OrderingPanel.Layout.Row = 3;
 ui.OrderingPanel.Layout.Column = 1;
 
 orderingGrid = uigridlayout(ui.OrderingPanel, [2, 1]);
@@ -668,9 +699,12 @@ ui.TraversalNoteLabel.Layout.Column = 1;
     orderingGrid, 'In-layer Path', {'Row-major', 'Serpentine'}, 'Row-major', [], ...
     {'Row-major', 'Serpentine'}, tips.pathMode);
 ui.PathModeRow.Layout.Row = 2;
+ui.PathModeRow.Tag = 'path-mode-row';
+ui.PathModeDropDown.Tag = 'path-mode';
 
 ui.PlanPanel = uipanel(powerOrderGrid, 'Title', 'Exposure / Scan');
-ui.PlanPanel.Layout.Row = 3;
+ui.PlanPanel.Tag = 'writing-plan-panel';
+ui.PlanPanel.Layout.Row = 4;
 ui.PlanPanel.Layout.Column = 1;
 
 planGrid = uigridlayout(ui.PlanPanel, [11, 1]);
@@ -682,14 +716,17 @@ planGrid.Padding = [6, 6, 6, 6];
     planGrid, 'Exposure Mode', {'Point dwell', 'Axis scan'}, 'Axis scan', @onPlanParamChanged, ...
     {'Point dwell', 'Axis scan'}, tips.exposureMode);
 ui.ExposureModeRow.Layout.Row = 1;
+ui.ExposureModeDropDown.Tag = 'exposure-mode';
 
 [ui.DwellSecondsRow, ui.DwellSecondsField] = createNumericRow(planGrid, 'Dwell (s)', 1, tips.dwellSeconds);
 ui.DwellSecondsRow.Layout.Row = 2;
+ui.DwellSecondsField.Tag = 'dwell-seconds';
 ui.DwellSecondsField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.PointExposureCountRow, ui.PointExposureCountField] = createNumericRow( ...
     planGrid, 'Exposures per point', 1, tips.pointExposureCount);
 ui.PointExposureCountRow.Layout.Row = 3;
+ui.PointExposureCountField.Tag = 'exposures-per-point';
 ui.PointExposureCountField.Limits = [1, Inf];
 ui.PointExposureCountField.RoundFractionalValues = 'on';
 ui.PointExposureCountField.ValueDisplayFormat = '%.0f';
@@ -698,6 +735,7 @@ ui.PointExposureCountField.ValueChangedFcn = @onPlanParamChanged;
 [ui.ScanAxisRow, ui.ScanAxisDropDown] = createDropdownRow( ...
     planGrid, 'Scan Axis', {'X', 'Y', 'Z'}, 'Z', @onPlanParamChanged, [], tips.scanAxis);
 ui.ScanAxisRow.Layout.Row = 4;
+ui.ScanAxisDropDown.Tag = 'scan-axis';
 
 [ui.ScanDirectionRow, ui.ScanDirectionDropDown] = createDropdownRow( ...
     planGrid, 'Direction', {'Positive', 'Negative'}, 'Positive', @onPlanParamChanged, ...
@@ -711,10 +749,12 @@ ui.ScanAnchorRow.Layout.Row = 6;
 
 [ui.ScanLengthRow, ui.ScanLengthField] = createNumericRow(planGrid, 'Length (mm)', 0.01, tips.scanLength);
 ui.ScanLengthRow.Layout.Row = 7;
+ui.ScanLengthField.Tag = 'scan-length';
 ui.ScanLengthField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.ScanSpeedRow, ui.ScanSpeedField] = createNumericRow(planGrid, 'Speed (mm/s)', 0.01, tips.scanSpeed);
 ui.ScanSpeedRow.Layout.Row = 8;
+ui.ScanSpeedField.Tag = 'scan-speed';
 ui.ScanSpeedField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.ScanLeadInRow, ui.ScanLeadInField] = createNumericRow(planGrid, 'Lead-in (mm)', 0.005, tips.scanLeadIn);
@@ -727,6 +767,7 @@ ui.ScanLeadOutField.ValueChangedFcn = @onPlanParamChanged;
 
 [ui.PauseSecondsRow, ui.PauseSecondsField] = createNumericRow(planGrid, 'Pre-write pause (s)', 0.1, tips.pauseSeconds);
 ui.PauseSecondsRow.Layout.Row = 11;
+ui.PauseSecondsField.Tag = 'pause-seconds';
 ui.PauseSecondsField.ValueChangedFcn = @onPlanParamChanged;
 
 ui.PatternRecipePanel = uipanel(patternTabGrid, 'Title', 'Recipe Definitions');
@@ -807,6 +848,7 @@ ui.GenerateButton = uibutton(buttonGrid, ...
     'ButtonPushedFcn', @onGenerate);
 ui.GenerateButton.Layout.Row = 1;
 ui.GenerateButton.Layout.Column = 1;
+ui.GenerateButton.Tag = 'generate-preview';
 
 ui.LoadPlanButton = uibutton(buttonGrid, ...
     'push', ...
@@ -821,6 +863,7 @@ ui.SaveButton = uibutton(buttonGrid, ...
     'ButtonPushedFcn', @onSave);
 ui.SaveButton.Layout.Row = 1;
 ui.SaveButton.Layout.Column = 3;
+ui.SaveButton.Tag = 'save-plan';
 
 ui.FileHintLabel = uilabel(actionGrid, ...
     'Text', 'Suggested CSV filename will appear after Generate Preview.', ...
@@ -835,6 +878,7 @@ ui.StatusLabel = uilabel(actionGrid, ...
     'FontWeight', 'bold');
 ui.StatusLabel.Layout.Row = 5;
 ui.StatusLabel.Layout.Column = 1;
+ui.StatusLabel.Tag = 'status-label';
 
 previewPanel = uipanel(mainGrid, 'Title', 'Output / Preview');
 previewPanel.Layout.Row = 1;
@@ -885,9 +929,15 @@ onLatticeTypeChanged();
 onPowerModeChanged();
 onPlanParamChanged();
 onGenerate();
+bindGeneratorDirtyTracking();
+fig.UserData = ui;
+appUi = ui;
 applyCompactFonts(fig);
 
     function onLatticeTypeChanged(~, ~)
+        latticeType = string(ui.LatticeTypeDropDown.Value);
+        switchGeneratorWritingDraft(latticeType);
+        writingSpec = generator_writing_spec(latticeType);
         if state.generatedSourceType == "loaded_plan"
             state.generatedData = [];
             state.generatedPlanTable = table();
@@ -896,6 +946,7 @@ applyCompactFonts(fig);
             state.previewFromLoadedPlan = false;
             state.generatedSourceType = "";
             state.generatedGeneratorType = "";
+            state.generatedRecipeConfig = struct([]);
             ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
             ui.DataTable.ColumnName = writingPlanColumnNames();
             ui.SummaryLabel.Text = 'Generator changed. Generate a new preview before saving.';
@@ -903,7 +954,6 @@ applyCompactFonts(fig);
             ui.StatusLabel.Text = 'Loaded plan cleared from memory after Generator Type changed.';
         end
 
-        latticeType = string(ui.LatticeTypeDropDown.Value);
         isStaircase = latticeType == "Staircase";
         isScanTestMatrix = latticeType == "Scan Parameter Matrix";
         isDwellTestMatrix = latticeType == "Point Dwell Parameter Matrix";
@@ -918,8 +968,7 @@ applyCompactFonts(fig);
         isReleaseMode = isHexReleaseMode || isCircleReleaseCut;
         isCutMode = isHexCut || isReleaseMode;
         showHexGeometry = isHexCut || isHexReleaseMode;
-        isFixedOrder = isStaircase || isScanTestMatrix || isDwellTestMatrix || ...
-            isExposureCountTestMatrix || isGrating || isZPush || isCutMode;
+        isFixedOrder = writingSpec.orderingOwner ~= "user";
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
@@ -985,30 +1034,25 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
         updateParameterSweepVisibility();
 
-        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ...
-            ~isStaircase && ~isScanTestMatrix && ~isDwellTestMatrix && ...
-            ~isExposureCountTestMatrix && ~isCutMode);
-        setPanelRow(powerOrderGrid, 2, ui.OrderingPanel, 'fit', true);
+        setPanelRow(powerOrderGrid, 1, ui.WritingProfilePanel, 'fit', true);
+        setPanelRow(powerOrderGrid, 2, ui.PowerPanel, 'fit', writingSpec.powerOwner == "user");
+        setPanelRow(powerOrderGrid, 3, ui.OrderingPanel, 'fit', true);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
-        setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isCutMode);
+        setPanelRow(powerOrderGrid, 4, ui.PlanPanel, 'fit', writingSpec.profile ~= "recipe_path");
+        setPanelRow(latticeGrid, 47, ui.WritingRecipePanel, 'fit', true);
         if ~isExcelPatternMode()
             configurePreviewMode(false);
         end
-        if isGrating || isScanTestMatrix
+        if writingSpec.profile == "axis_path"
             ui.ExposureModeDropDown.Value = 'Axis scan';
-            if isGrating
-                syncGratingScanAxis();
-            end
-            onPlanParamChanged();
-        elseif isDwellTestMatrix || isExposureCountTestMatrix
+        elseif writingSpec.profile == "point"
             ui.ExposureModeDropDown.Value = 'Point dwell';
-            onPlanParamChanged();
-        elseif isZPush
-            ui.ExposureModeDropDown.Value = 'Point dwell';
-            onPlanParamChanged();
-        elseif isCutMode
-            onPlanParamChanged();
         end
+        if isGrating
+            syncGratingScanAxis();
+        end
+        onPlanParamChanged();
+        updateWritingProfileSummary(writingSpec);
         updateTraversalNote();
 
         if ~isExcelPatternMode()
@@ -1050,6 +1094,135 @@ applyCompactFonts(fig);
         end
     end
 
+    function switchGeneratorWritingDraft(nextType)
+        if isempty(state.defaultWritingDraft)
+            state.defaultWritingDraft = captureWritingDraft();
+        end
+        if state.activeGeneratorType == nextType
+            return;
+        end
+        if strlength(state.activeGeneratorType) > 0
+            previousKey = generatorDraftKey(state.activeGeneratorType);
+            state.generatorWritingDrafts.(previousKey) = captureWritingDraft();
+        end
+        nextKey = generatorDraftKey(nextType);
+        if isfield(state.generatorWritingDrafts, nextKey)
+            restoreWritingDraft(state.generatorWritingDrafts.(nextKey));
+        else
+            restoreWritingDraft(state.defaultWritingDraft);
+        end
+        state.activeGeneratorType = nextType;
+        onPowerModeChanged();
+    end
+
+    function draft = captureWritingDraft()
+        draft = struct( ...
+            'powerMode', ui.PowerModeDropDown.Value, ...
+            'fixedPower', ui.FixedPowerField.Value, ...
+            'powerFormula', ui.PowerFormulaField.Value, ...
+            'powerPoints', {ui.PowerPointsArea.Value}, ...
+            'pathMode', ui.PathModeDropDown.Value, ...
+            'exposureMode', ui.ExposureModeDropDown.Value, ...
+            'dwellSeconds', ui.DwellSecondsField.Value, ...
+            'exposureCount', ui.PointExposureCountField.Value, ...
+            'scanAxis', ui.ScanAxisDropDown.Value, ...
+            'scanDirection', ui.ScanDirectionDropDown.Value, ...
+            'scanAnchor', ui.ScanAnchorDropDown.Value, ...
+            'scanLength', ui.ScanLengthField.Value, ...
+            'scanSpeed', ui.ScanSpeedField.Value, ...
+            'scanLeadIn', ui.ScanLeadInField.Value, ...
+            'scanLeadOut', ui.ScanLeadOutField.Value, ...
+            'pauseSeconds', ui.PauseSecondsField.Value);
+    end
+
+    function restoreWritingDraft(draft)
+        ui.PowerModeDropDown.Value = draft.powerMode;
+        ui.FixedPowerField.Value = draft.fixedPower;
+        ui.PowerFormulaField.Value = draft.powerFormula;
+        ui.PowerPointsArea.Value = draft.powerPoints;
+        ui.PathModeDropDown.Value = draft.pathMode;
+        ui.ExposureModeDropDown.Value = draft.exposureMode;
+        ui.DwellSecondsField.Value = draft.dwellSeconds;
+        ui.PointExposureCountField.Value = draft.exposureCount;
+        ui.ScanAxisDropDown.Value = draft.scanAxis;
+        ui.ScanDirectionDropDown.Value = draft.scanDirection;
+        ui.ScanAnchorDropDown.Value = draft.scanAnchor;
+        ui.ScanLengthField.Value = draft.scanLength;
+        ui.ScanSpeedField.Value = draft.scanSpeed;
+        ui.ScanLeadInField.Value = draft.scanLeadIn;
+        ui.ScanLeadOutField.Value = draft.scanLeadOut;
+        ui.PauseSecondsField.Value = draft.pauseSeconds;
+    end
+
+    function key = generatorDraftKey(generatorType)
+        key = matlab.lang.makeValidName(char(normalizePlanOption(generatorType)));
+    end
+
+    function updateWritingProfileSummary(spec)
+        if spec.profile == "configurable"
+            operationText = string(ui.ExposureModeDropDown.Value);
+        elseif spec.profile == "point"
+            operationText = "Point dwell (fixed)";
+        elseif spec.profile == "axis_path"
+            operationText = "Axis scan (fixed)";
+        else
+            operationText = "Recipe path (fixed)";
+        end
+        ui.WritingProfileLabel.Text = char(operationText + ". " + spec.profileSummary);
+    end
+
+    function bindGeneratorDirtyTracking()
+        if state.generatorCallbacksBound
+            return;
+        end
+        state.generatorCallbacksBound = true;
+        components = findall(latticeTab);
+        for iComponent = 1:numel(components)
+            component = components(iComponent);
+            if isprop(component, 'ValueChangedFcn')
+                previousCallback = component.ValueChangedFcn;
+                component.ValueChangedFcn = @(source, event) ...
+                    runGeneratorCallbackThenInvalidate(previousCallback, source, event);
+            end
+            if isprop(component, 'CellEditCallback')
+                previousEditCallback = component.CellEditCallback;
+                component.CellEditCallback = @(source, event) ...
+                    runGeneratorCallbackThenInvalidate(previousEditCallback, source, event);
+            end
+        end
+    end
+
+    function runGeneratorCallbackThenInvalidate(callback, source, event)
+        cleanup = onCleanup(@() markGeneratorPlanDirty());
+        invokeUiCallback(callback, source, event);
+    end
+
+    function invokeUiCallback(callback, source, event)
+        if isempty(callback)
+            return;
+        end
+        if isa(callback, 'function_handle')
+            callback(source, event);
+        elseif iscell(callback) && ~isempty(callback)
+            feval(callback{1}, source, event, callback{2:end});
+        else
+            error('Unsupported UI callback type.');
+        end
+    end
+
+    function markGeneratorPlanDirty()
+        if isExcelPatternMode()
+            return;
+        end
+        if state.generatedSourceType == "loaded_plan"
+            return;
+        end
+        ui.SaveButton.Enable = 'off';
+        state.generatorPlanDirty = true;
+        ui.FileHintLabel.Text = 'Settings changed. Generate Preview before saving.';
+        ui.StatusLabel.Text = 'Generator settings changed; the displayed plan is stale.';
+    end
+
     function onPreviewRowsChanged(~, ~)
         state.tablePreviewRowLimit = validatePreviewRowLimit(ui.PreviewRowsField.Value);
         ui.PreviewRowsField.Value = state.tablePreviewRowLimit;
@@ -1073,37 +1246,47 @@ applyCompactFonts(fig);
     end
 
     function onPlanParamChanged(~, ~)
-        isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
-        isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
-        isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
-        isExposureCountTestMatrix = string(ui.LatticeTypeDropDown.Value) == ...
-            "Single Exposure Count Parameter Matrix";
-        isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         if isExcelPatternMode()
             return;
         end
-        if isGrating || isScanTestMatrix
+        writingSpec = generator_writing_spec(ui.LatticeTypeDropDown.Value);
+        isGrating = writingSpec.key == "segmented_grating";
+        if writingSpec.profile == "axis_path"
             ui.ExposureModeDropDown.Value = 'Axis scan';
-            if isGrating
-                syncGratingScanAxis();
-            end
-        elseif isZPush || isDwellTestMatrix || isExposureCountTestMatrix
+        elseif writingSpec.profile == "point"
             ui.ExposureModeDropDown.Value = 'Point dwell';
+        end
+        if isGrating
+            syncGratingScanAxis();
+        end
+        if writingSpec.profile == "configurable"
+            ui.ExposureModeDropDown.Enable = 'on';
+        else
+            ui.ExposureModeDropDown.Enable = 'off';
         end
 
         isScan = string(ui.ExposureModeDropDown.Value) == "Axis scan";
         setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ...
-            ~isScan && ~isDwellTestMatrix && ~isExposureCountTestMatrix);
+            ~isScan && writingSpec.dwellOwner == "user");
         setPanelRow(planGrid, 3, ui.PointExposureCountRow, 'fit', ...
-            ~isScan && ~isExposureCountTestMatrix);
-        setPanelRow(planGrid, 4, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
-        setPanelRow(planGrid, 5, ui.ScanDirectionRow, 'fit', isScan);
-        setPanelRow(planGrid, 6, ui.ScanAnchorRow, 'fit', isScan);
-        setPanelRow(planGrid, 7, ui.ScanLengthRow, 'fit', isScan && ~isGrating);
-        setPanelRow(planGrid, 8, ui.ScanSpeedRow, 'fit', isScan && ~isScanTestMatrix);
-        setPanelRow(planGrid, 9, ui.ScanLeadInRow, 'fit', isScan);
-        setPanelRow(planGrid, 10, ui.ScanLeadOutRow, 'fit', isScan);
-        setPanelRow(planGrid, 11, ui.PauseSecondsRow, 'fit', ~isZPush);
+            ~isScan && writingSpec.exposureCountOwner == "user");
+        setPanelRow(planGrid, 4, ui.ScanAxisRow, 'fit', ...
+            isScan && writingSpec.scanAxisOwner == "user");
+        setPanelRow(planGrid, 5, ui.ScanDirectionRow, 'fit', ...
+            isScan && writingSpec.scanDirectionOwner == "user");
+        setPanelRow(planGrid, 6, ui.ScanAnchorRow, 'fit', ...
+            isScan && writingSpec.scanAnchorOwner == "user");
+        setPanelRow(planGrid, 7, ui.ScanLengthRow, 'fit', ...
+            isScan && writingSpec.scanLengthOwner == "user");
+        setPanelRow(planGrid, 8, ui.ScanSpeedRow, 'fit', ...
+            isScan && writingSpec.scanSpeedOwner == "user");
+        setPanelRow(planGrid, 9, ui.ScanLeadInRow, 'fit', ...
+            isScan && writingSpec.scanLeadOwner == "user");
+        setPanelRow(planGrid, 10, ui.ScanLeadOutRow, 'fit', ...
+            isScan && writingSpec.scanLeadOwner == "user");
+        setPanelRow(planGrid, 11, ui.PauseSecondsRow, 'fit', ...
+            writingSpec.pauseOwner == "user");
+        updateWritingProfileSummary(writingSpec);
 
         if ~isempty(state.generatedData) && ~isempty(state.generatedSummary) && ...
                 state.generatedSourceType == "procedural" && ...
@@ -1350,6 +1533,13 @@ applyCompactFonts(fig);
             state.previewFromLoadedPlan = false;
             ui.GenerateButton.Text = 'Generate Pattern';
             configurePreviewMode(true);
+            if state.generatedSourceType == "excel_pattern" && ...
+                    state.generatedGeneratorType == currentGenerationContext() && ...
+                    ~isempty(state.generatedPlanTable)
+                ui.SaveButton.Enable = 'on';
+            else
+                ui.SaveButton.Enable = 'off';
+            end
             if ~isempty(state.patternMatrix)
                 try
                     updatePatternPreview();
@@ -1374,13 +1564,20 @@ applyCompactFonts(fig);
 
         if canRestoreLoadedPlan
             state.previewFromLoadedPlan = true;
+            ui.SaveButton.Enable = 'on';
             updatePreview(state.generatedPrefix, state.generatedSummary, ...
                 state.generatedPlanTable);
         elseif canRestoreProceduralPlan
             state.previewFromLoadedPlan = false;
+            if isempty(state.generatedRecipeConfig) || state.generatorPlanDirty
+                ui.SaveButton.Enable = 'off';
+            else
+                ui.SaveButton.Enable = 'on';
+            end
             updatePreview(state.generatedPrefix, state.generatedSummary, ...
                 state.generatedPlanTable);
         else
+            ui.SaveButton.Enable = 'off';
             showGeneratorWorkspacePreview();
         end
     end
@@ -1756,7 +1953,9 @@ applyCompactFonts(fig);
             state.generatedSummary = struct([]);
             state.generatedSourceType = "";
             state.generatedGeneratorType = "";
+            state.generatedRecipeConfig = struct([]);
         end
+        ui.SaveButton.Enable = 'off';
         ui.DataTable.Data = cell(0, numel(writingPlanColumnNames()));
         ui.DataTable.ColumnName = writingPlanColumnNames();
         ui.FileHintLabel.Text = 'Configure all processed Recipes, then Generate Preview.';
@@ -2029,9 +2228,11 @@ applyCompactFonts(fig);
         state.previewFromLoadedPlan = false;
         state.generatedSourceType = "excel_pattern";
         state.generatedGeneratorType = currentGenerationContext();
+        state.generatedRecipeConfig = struct([]);
         state.patternPoints = points;
 
         updatePatternPreview();
+        ui.SaveButton.Enable = 'on';
         ui.StatusLabel.Text = sprintf( ...
             'Generated Excel Recipe Pattern: %d source points, %d operations.', ...
             height(points), height(planTable));
@@ -2332,22 +2533,35 @@ applyCompactFonts(fig);
                 return;
             end
 
-            params = collectParams();
-            [data, prefix, summary] = generate_point_cloud(params);
-            if isfield(summary, 'plannedExposureCount') && ...
-                    summary.plannedExposureCount > state.maxProceduralPlanRows
-                error(['The configured exposure-count matrix would create %d Writing Plan rows, ', ...
-                    'which exceeds the app limit of %d. Reduce exposure counts, powers, or region size.'], ...
-                    summary.plannedExposureCount, state.maxProceduralPlanRows);
+            state.generatorPlanDirty = true;
+            ui.SaveButton.Enable = 'off';
+            recipeConfig = collectRecipeConfig();
+            estimatedSourceRows = estimate_generator_source_rows(recipeConfig.generator);
+            if estimatedSourceRows > state.maxProceduralPlanRows
+                error(['The Generator would allocate approximately %d source rows, ', ...
+                    'which exceeds the app limit of %d. Reduce geometry, matrix, ', ...
+                    'array, layer, or repeat counts.'], ...
+                    estimatedSourceRows, state.maxProceduralPlanRows);
             end
-            state.generatedData = data;
+            [data, prefix, summary] = generate_point_cloud(recipeConfig.generator);
+            generatedData = generated_data_to_table(data, recipeConfig.plan);
+            validateProceduralPlanRowEstimate(generatedData, recipeConfig.plan);
+            planTable = buildWritingPlanTable(generatedData, recipeConfig.plan);
+            if height(planTable) > state.maxProceduralPlanRows
+                error('Generated Writing Plan exceeds the app limit of %d rows.', ...
+                    state.maxProceduralPlanRows);
+            end
+            state.generatedData = generatedData;
+            state.generatedPlanTable = planTable;
             state.generatedPrefix = prefix;
             state.generatedSummary = summary;
             state.previewFromLoadedPlan = false;
             state.generatedSourceType = "procedural";
             state.generatedGeneratorType = currentGenerationContext();
-            refreshPlanFromCurrentSettings();
+            state.generatedRecipeConfig = recipeConfig;
+            state.generatorPlanDirty = false;
             updatePreview(prefix, summary, state.generatedPlanTable);
+            ui.SaveButton.Enable = 'on';
             ui.StatusLabel.Text = sprintf('Generated %d operations.', height(state.generatedPlanTable));
         catch err
             uialert(fig, err.message, 'Generate Failed');
@@ -2381,9 +2595,12 @@ applyCompactFonts(fig);
             state.previewFromLoadedPlan = true;
             state.generatedSourceType = "loaded_plan";
             state.generatedGeneratorType = currentGenerationContext();
+            state.generatedRecipeConfig = struct([]);
+            state.generatorPlanDirty = false;
             state.lastSaveFolder = folderName;
 
             updatePreview(prefix, summary, planTable);
+            ui.SaveButton.Enable = 'on';
             ui.FileHintLabel.Text = ['Loaded: ', fullPath];
             ui.StatusLabel.Text = sprintf('Loaded %d operations.', height(planTable));
         catch err
@@ -2395,25 +2612,18 @@ applyCompactFonts(fig);
     function onSave(~, ~)
         try
             currentGeneratorType = currentGenerationContext();
-            needsGenerate = isempty(state.generatedPlanTable) || ...
-                (state.generatedSourceType == "loaded_plan" && ...
-                ~state.previewFromLoadedPlan);
-            if state.generatedSourceType ~= "loaded_plan" && ...
+            if isempty(state.generatedPlanTable) || ...
                     state.generatedGeneratorType ~= currentGeneratorType
-                needsGenerate = true;
-            end
-
-            if needsGenerate
-                onGenerate();
-                if isempty(state.generatedPlanTable) || ...
-                        state.generatedSourceType == "loaded_plan" || ...
-                        state.generatedGeneratorType ~= currentGeneratorType
-                    return;
-                end
+                error('Generate Preview for the current workflow before saving.');
             end
 
             if state.generatedSourceType == "procedural"
-                refreshPlanFromCurrentSettings();
+                currentConfig = collectRecipeConfig();
+                if state.generatorPlanDirty || isempty(state.generatedRecipeConfig) || ...
+                        ~isequaln(currentConfig, state.generatedRecipeConfig)
+                    error(['Generator settings changed after the last preview. ', ...
+                        'Generate Preview again before saving.']);
+                end
             end
 
             defaultName = [state.generatedPrefix, '_writing_plan.csv'];
@@ -2431,6 +2641,7 @@ applyCompactFonts(fig);
             writetable(state.generatedPlanTable, fullPath, 'Delimiter', delimiter);
 
             state.lastSaveFolder = folderName;
+            ui.SaveButton.Enable = 'on';
             ui.StatusLabel.Text = ['Saved: ', fullPath];
         catch err
             uialert(fig, err.message, 'Save Failed');
@@ -2443,6 +2654,7 @@ applyCompactFonts(fig);
         ui.PreviewRowsField.Value = state.tablePreviewRowLimit;
 
         latticeType = string(ui.LatticeTypeDropDown.Value);
+        writingSpec = generator_writing_spec(latticeType);
         params = struct();
         params.lattice = struct();
         params.lattice.type = latticeType;
@@ -2642,15 +2854,17 @@ applyCompactFonts(fig);
         end
 
         params.region = struct('mode', 'Full Block');
-
-        params.ordering = struct('pathMode', string(ui.PathModeDropDown.Value));
-
-        params.power = struct();
-        params.power.mode = string(ui.PowerModeDropDown.Value);
-        params.power.fixedValue = ui.FixedPowerField.Value;
-        params.power.formula = string(ui.PowerFormulaField.Value);
-        params.power.linearPointsText = strjoin(string(ui.PowerPointsArea.Value), newline);
-        params.power.distanceUnit = 'mm';
+        if writingSpec.orderingOwner == "user"
+            params.ordering = struct('pathMode', string(ui.PathModeDropDown.Value));
+        end
+        if writingSpec.powerOwner == "user"
+            params.power = struct();
+            params.power.mode = string(ui.PowerModeDropDown.Value);
+            params.power.fixedValue = ui.FixedPowerField.Value;
+            params.power.formula = string(ui.PowerFormulaField.Value);
+            params.power.linearPointsText = strjoin(string(ui.PowerPointsArea.Value), newline);
+            params.power.distanceUnit = 'mm';
+        end
     end
 
     function rows = gratingChannelStartTablesToRows(segmentOneData, segmentTwoData, channelRows, channelCols)
@@ -2737,96 +2951,129 @@ applyCompactFonts(fig);
         end
     end
 
+    function recipeConfig = collectRecipeConfig()
+        recipeConfig = struct( ...
+            'generator', collectParams(), ...
+            'plan', collectPlanConfig());
+    end
+
+    function validateProceduralPlanRowEstimate(generatedData, planConfig)
+        estimatedRows = estimate_writing_plan_rows(generatedData, planConfig);
+        if estimatedRows > state.maxProceduralPlanRows
+            error(['The configured recipe would create %d Writing Plan rows, ', ...
+                'which exceeds the app limit of %d. Reduce counts, repeats, ', ...
+                'lead segments, or exposures.'], ...
+                estimatedRows, state.maxProceduralPlanRows);
+        end
+    end
+
     function refreshPlanFromCurrentSettings()
         planConfig = collectPlanConfig();
+        validateProceduralPlanRowEstimate(state.generatedData, planConfig);
         state.generatedPlanTable = buildWritingPlanTable(state.generatedData, planConfig);
+        if height(state.generatedPlanTable) > state.maxProceduralPlanRows
+            error('Generated Writing Plan exceeds the app limit of %d rows.', ...
+                state.maxProceduralPlanRows);
+        end
     end
 
     function planConfig = collectPlanConfig()
-        isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
-        isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
-        isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
-        isExposureCountTestMatrix = string(ui.LatticeTypeDropDown.Value) == ...
-            "Single Exposure Count Parameter Matrix";
-        isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
-        isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
-        isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
-        isHexReleaseArray = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut Array";
-        isCircleReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Circle Release Cut";
-        isCutMode = isHexCut || isHexReleaseCut || isHexReleaseArray || isCircleReleaseCut;
+        latticeType = string(ui.LatticeTypeDropDown.Value);
+        writingSpec = generator_writing_spec(latticeType);
         planConfig = struct();
-        exposureMode = normalizePlanOption(ui.ExposureModeDropDown.Value);
-        if exposureMode == "point_dwell"
-            planConfig.profile = "point";
-        else
-            planConfig.profile = "axis_path";
-        end
-        if isExposureCountTestMatrix
-            planConfig.dwellSeconds = single_exposure_dwell_seconds();
-        elseif isDwellTestMatrix
-            if string(ui.DwellTestModeDropDown.Value) == "custom"
-                dwellValues = parse_parameter_row_values( ...
-                    ui.DwellTestValuesArea.Value, 'Custom dwell times');
-                planConfig.dwellSeconds = dwellValues(1);
+        if writingSpec.profile == "configurable"
+            exposureMode = normalizePlanOption(ui.ExposureModeDropDown.Value);
+            if exposureMode == "point_dwell"
+                planConfig.profile = "point";
             else
-                planConfig.dwellSeconds = validatePositiveScalar( ...
-                    ui.DwellTestStartField.Value, 'Dwell start');
+                planConfig.profile = "axis_path";
             end
-            planConfig.dwellColumn = 5;
         else
-            planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
+            planConfig.profile = writingSpec.profile;
         end
-        if isExposureCountTestMatrix
-            planConfig.exposuresPerPoint = 1;
-            planConfig.exposureCountColumn = 5;
-        else
-            planConfig.exposuresPerPoint = validatePositiveInteger( ...
-                ui.PointExposureCountField.Value, 'Exposures per point');
-            ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
-        end
-        planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
-        planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
-        planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
-        if isGrating
-            planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.GratingScanLengthField.Value, 'Grating scan length'));
-        else
-            planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length'));
-        end
-        if isScanTestMatrix
-            if string(ui.ScanTestSpeedModeDropDown.Value) == "custom"
-                speedValues = parse_parameter_row_values( ...
-                    ui.ScanTestSpeedValuesArea.Value, 'Custom scan speeds');
-                planConfig.scanSpeedMmPerSecond = speedValues(1);
+        planConfig.preserveOrder = writingSpec.preserveOrder;
+
+        if planConfig.profile == "point"
+            if writingSpec.dwellOwner == "user"
+                planConfig.dwellSeconds = validateNonnegativeScalar( ...
+                    ui.DwellSecondsField.Value, 'Dwell time');
+            elseif writingSpec.key == "point_dwell_parameter_matrix"
+                if string(ui.DwellTestModeDropDown.Value) == "custom"
+                    dwellValues = parse_parameter_row_values( ...
+                        ui.DwellTestValuesArea.Value, 'Custom dwell times');
+                    planConfig.dwellSeconds = validatePositiveScalar(dwellValues(1), 'Dwell start');
+                else
+                    planConfig.dwellSeconds = validatePositiveScalar( ...
+                        ui.DwellTestStartField.Value, 'Dwell start');
+                end
+                planConfig.dwellColumn = 5;
+            elseif writingSpec.key == "single_exposure_count_parameter_matrix"
+                planConfig.dwellSeconds = single_exposure_dwell_seconds();
             else
+                planConfig.dwellSeconds = 0;
+            end
+
+            if writingSpec.exposureCountOwner == "user"
+                planConfig.exposuresPerPoint = validatePositiveInteger( ...
+                    ui.PointExposureCountField.Value, 'Exposures per point');
+                ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
+            elseif writingSpec.key == "single_exposure_count_parameter_matrix"
+                planConfig.exposuresPerPoint = 1;
+                planConfig.exposureCountColumn = 5;
+            else
+                planConfig.exposuresPerPoint = 1;
+            end
+
+            if writingSpec.pauseOwner == "user"
+                planConfig.pauseSeconds = validateNonnegativeScalar( ...
+                    ui.PauseSecondsField.Value, 'Pause time');
+            elseif writingSpec.key == "z_push"
+                planConfig.pauseSeconds = 0;
+                planConfig.pauseColumn = 5;
+            else
+                planConfig.pauseSeconds = 0;
+            end
+        elseif planConfig.profile == "axis_path"
+            if writingSpec.scanAxisOwner == "user"
+                planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
+            else
+                planConfig.scanAxis = inferredGratingScanAxis();
+            end
+            planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
+            planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
+            if writingSpec.scanLengthOwner == "user"
+                planConfig.scanLengthUm = mmToUm(validatePositiveScalar( ...
+                    ui.ScanLengthField.Value, 'Scan length'));
+            else
+                planConfig.scanLengthUm = mmToUm(validatePositiveScalar( ...
+                    ui.GratingScanLengthField.Value, 'Grating scan length'));
+            end
+            if writingSpec.scanSpeedOwner == "user"
                 planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
-                    ui.ScanTestSpeedStartField.Value, 'Scan speed start');
+                    ui.ScanSpeedField.Value, 'Scan speed');
+            else
+                if string(ui.ScanTestSpeedModeDropDown.Value) == "custom"
+                    speedValues = parse_parameter_row_values( ...
+                        ui.ScanTestSpeedValuesArea.Value, 'Custom scan speeds');
+                    planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
+                        speedValues(1), 'Scan speed start');
+                else
+                    planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
+                        ui.ScanTestSpeedStartField.Value, 'Scan speed start');
+                end
+                planConfig.scanSpeedColumn = 5;
             end
-            planConfig.scanSpeedColumn = 5;
+            planConfig.scanLeadInMm = validateNonnegativeScalar( ...
+                ui.ScanLeadInField.Value, 'Scan lead-in');
+            planConfig.scanLeadOutMm = validateNonnegativeScalar( ...
+                ui.ScanLeadOutField.Value, 'Scan lead-out');
+            planConfig.pauseSeconds = validateNonnegativeScalar( ...
+                ui.PauseSecondsField.Value, 'Pause time');
         else
-            planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
-        end
-        planConfig.scanLeadInMm = validateNonnegativeScalar(ui.ScanLeadInField.Value, 'Scan lead-in');
-        planConfig.scanLeadOutMm = validateNonnegativeScalar(ui.ScanLeadOutField.Value, 'Scan lead-out');
-        planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
-        planConfig.preserveOrder = isGrating || isZPush || isExposureCountTestMatrix;
-        latticeRecipe = normalizePlanOption(ui.LatticeTypeDropDown.Value);
-
-        if isGrating
-            planConfig.profile = "axis_path";
-            planConfig.scanAxis = inferredGratingScanAxis();
-        elseif isScanTestMatrix
-            planConfig.profile = "axis_path";
-        elseif isDwellTestMatrix
-            planConfig.profile = "point";
-        elseif isExposureCountTestMatrix
-            planConfig.profile = "point";
-        elseif isZPush
-            planConfig.profile = "point";
-        elseif isCutMode
-            planConfig.profile = "recipe_path";
-            planConfig.preserveOrder = true;
+            planConfig.pauseSeconds = 0;
         end
 
+        latticeRecipe = normalizePlanOption(latticeType);
         if planConfig.profile == "axis_path"
             planConfig.sourceRecipe = latticeRecipe + "_axis_scan";
         elseif planConfig.profile == "point"

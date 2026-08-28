@@ -36,7 +36,8 @@ is deliberately aligned:
   per-column power are written explicitly to every relevant Writing Plan row.
 - Axis scans default to 0.005 mm laser-off lead-in and lead-out. These segments
   use that region's scan speed so acceleration and deceleration happen outside
-  the exposed line; adjust both distances under `Writing Settings` as needed.
+  the exposed line; adjust both distances in the Generator's `Writing Recipe`
+  section as needed.
 
 The generator forces `Axis scan` exposure for this mode. A single speed row or
 power column is allowed; range modes use the corresponding `Start` value, while
@@ -119,6 +120,19 @@ procedural shapes listed under `Generator Type`.
 Pattern mode currently produces point-dwell operations only. Supporting
 additional per-Recipe hardware settings such as pulse frequency or pulse
 width requires a future Writing Plan schema and executor update.
+
+## Integrated Writing Recipe
+
+The procedural `Generator` tab contains both geometry and the effective
+writing recipe. Controls are shown only when the selected Generator owns that
+setting. Fixed choices such as matrix point dwell, grating axis scan, Z Push
+pause, and explicit cut paths remain visible as read-only profile summaries.
+
+Writing settings are stored separately for each Generator Type during the app
+session. Changing any Generator input marks the existing preview stale and
+disables `Save Plan`; generate a new preview to create and save one atomic
+configuration snapshot. Before allocation and Writing Plan expansion, the app
+also applies the common 2,000,000-row safety limit.
 
 ## Packaging
 

@@ -5,9 +5,7 @@ if isempty(data)
     planTable = table();
     return;
 end
-if size(data, 2) < 4
-    error('Generated data must include X, Y, Z, and power columns.');
-end
+localRequireGeneratedColumns(data, {'x_mm', 'y_mm', 'z_mm', 'power'}, 4);
 
 switch string(config.profile)
     case "point"
@@ -33,11 +31,12 @@ data = data(sourceRows, :);
 pauseSeconds = pauseSeconds(sourceRows);
 dwellSeconds = dwellSeconds(sourceRows);
 rowCount = numel(sourceRows);
+[x, y, z, power] = localXYZPower(data);
 planTable = localPlanTable( ...
     repmat("point", rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), ...
-    repmat("dwell", rowCount, 1), data(:, 1), data(:, 2), data(:, 3), ...
+    repmat("dwell", rowCount, 1), x, y, z, ...
     nan(rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), ...
-    data(:, 4), dwellSeconds, pauseSeconds, ...
+    power, dwellSeconds, pauseSeconds, ...
     repmat(string(config.sourceRecipe), rowCount, 1));
 planTable = localSortOperations(planTable, config);
 end
@@ -45,7 +44,8 @@ end
 function planTable = localAxisPathPlan(data, config)
 rowCount = size(data, 1);
 scanSpeed = localScanSpeedValues(data, config);
-startCoordinates = data(:, 1:3);
+[x, y, z, power] = localXYZPower(data);
+startCoordinates = [x, y, z];
 endCoordinates = startCoordinates;
 axisIndex = find(["X", "Y", "Z"] == upper(string(config.scanAxis)), 1);
 if isempty(axisIndex)
@@ -72,7 +72,7 @@ exposurePlan = localPlanTable( ...
     repmat("on", rowCount, 1), ...
     startCoordinates(:, 1), startCoordinates(:, 2), startCoordinates(:, 3), ...
     endCoordinates(:, 1), endCoordinates(:, 2), endCoordinates(:, 3), ...
-    scanSpeed, data(:, 4), ...
+    scanSpeed, power, ...
     nan(rowCount, 1), localPauseValues(data, config), ...
     repmat(string(config.sourceRecipe), rowCount, 1));
 exposurePlan = localSortOperations(exposurePlan, config);
@@ -125,6 +125,9 @@ planTable = localPlanTable( ...
 end
 
 function planTable = localRecipePathPlan(data, config)
+if istable(data)
+    data = localRecipePathMatrix(data);
+end
 if size(data, 2) < 14
     error('Recipe path data must include end, approach, departure, and speed columns.');
 end
@@ -242,10 +245,26 @@ end
 
 function pauseSeconds = localPauseValues(data, config)
 pauseSeconds = repmat(config.pauseSeconds, size(data, 1), 1);
+if istable(data)
+    if ismember('pause_s', data.Properties.VariableNames)
+        pauseSeconds = data.pause_s;
+    end
+    if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
+        error('Generated pause values must be finite nonnegative numbers.');
+    end
+    return;
+end
 scanSpeedColumn = localOptionalColumn(config, 'scanSpeedColumn');
 dwellColumn = localOptionalColumn(config, 'dwellColumn');
 exposureCountColumn = localOptionalColumn(config, 'exposureCountColumn');
-if size(data, 2) >= 5 && scanSpeedColumn ~= 5 && dwellColumn ~= 5 && ...
+pauseColumn = localOptionalColumn(config, 'pauseColumn');
+if ~isnan(pauseColumn)
+    if pauseColumn > size(data, 2)
+        error('writingPlanV2:MissingPauseColumn', ...
+            'Generated data does not contain configured pause column %d.', pauseColumn);
+    end
+    pauseSeconds = data(:, pauseColumn);
+elseif size(data, 2) >= 5 && scanSpeedColumn ~= 5 && dwellColumn ~= 5 && ...
         exposureCountColumn ~= 5
     pauseSeconds = data(:, 5);
 end
@@ -255,6 +274,9 @@ end
 end
 
 function exposureCounts = localExposureCountValues(data, config)
+if istable(data) && ismember('exposure_count', data.Properties.VariableNames)
+    exposureCounts = data.exposure_count;
+else
 exposureCountColumn = localOptionalColumn(config, 'exposureCountColumn');
 if isnan(exposureCountColumn)
     if ~isfield(config, 'exposuresPerPoint') || isempty(config.exposuresPerPoint)
@@ -270,6 +292,7 @@ elseif exposureCountColumn > size(data, 2)
 else
     exposureCounts = data(:, exposureCountColumn);
 end
+end
 
 if any(~isfinite(exposureCounts) | exposureCounts < 1 | exposureCounts > flintmax | ...
         abs(exposureCounts - round(exposureCounts)) > 1e-9)
@@ -280,6 +303,9 @@ exposureCounts = round(exposureCounts);
 end
 
 function dwellValues = localDwellValues(data, config)
+if istable(data) && ismember('dwell_s', data.Properties.VariableNames)
+    dwellValues = data.dwell_s;
+else
 dwellColumn = localOptionalColumn(config, 'dwellColumn');
 if isnan(dwellColumn)
     dwellValues = repmat(config.dwellSeconds, size(data, 1), 1);
@@ -289,6 +315,7 @@ elseif dwellColumn > size(data, 2)
 else
     dwellValues = data(:, dwellColumn);
 end
+end
 if any(~isfinite(dwellValues) | dwellValues < 0)
     error('writingPlanV2:InvalidDwellTime', ...
         'Generated dwell-time values must be finite nonnegative numbers.');
@@ -296,6 +323,9 @@ end
 end
 
 function speedValues = localScanSpeedValues(data, config)
+if istable(data) && ismember('speed_mm_s', data.Properties.VariableNames)
+    speedValues = data.speed_mm_s;
+else
 scanSpeedColumn = localOptionalColumn(config, 'scanSpeedColumn');
 if isnan(scanSpeedColumn)
     speedValues = repmat(config.scanSpeedMmPerSecond, size(data, 1), 1);
@@ -304,6 +334,7 @@ elseif scanSpeedColumn > size(data, 2)
         'Generated data does not contain configured scan-speed column %d.', scanSpeedColumn);
 else
     speedValues = data(:, scanSpeedColumn);
+end
 end
 if any(~isfinite(speedValues) | speedValues <= 0)
     error('writingPlanV2:InvalidScanSpeed', ...
@@ -323,6 +354,59 @@ if ~(isscalar(columnIndex) && isnumeric(columnIndex) && isfinite(columnIndex) &&
         '%s must be a positive integer column index.', fieldName);
 end
 columnIndex = double(columnIndex);
+end
+
+function [x, y, z, power] = localXYZPower(data)
+if istable(data)
+    localRequireGeneratedColumns(data, {'x_mm', 'y_mm', 'z_mm', 'power'}, 4);
+    x = data.x_mm;
+    y = data.y_mm;
+    z = data.z_mm;
+    power = data.power;
+else
+    x = data(:, 1);
+    y = data(:, 2);
+    z = data(:, 3);
+    power = data(:, 4);
+end
+end
+
+function localRequireGeneratedColumns(data, names, minimumWidth)
+if istable(data)
+    missing = names(~ismember(names, data.Properties.VariableNames));
+    if ~isempty(missing)
+        error('Generated data is missing named column(s): %s.', strjoin(missing, ', '));
+    end
+elseif size(data, 2) < minimumWidth
+    error('Generated data must include X, Y, Z, and power columns.');
+end
+end
+
+function matrix = localRecipePathMatrix(data)
+required = { ...
+    'x_mm', 'y_mm', 'z_mm', 'power', ...
+    'x2_mm', 'y2_mm', 'z2_mm', ...
+    'approach_x_mm', 'approach_y_mm', 'approach_z_mm', ...
+    'departure_x_mm', 'departure_y_mm', 'departure_z_mm', ...
+    'segment_speed_mm_s'};
+localRequireGeneratedColumns(data, required, 14);
+matrix = zeros(height(data), 14);
+for iColumn = 1:numel(required)
+    matrix(:, iColumn) = data.(required{iColumn});
+end
+optional = {'transition_speed_mm_s', 'pause_s', ...
+    'source_group_id', 'source_segment_index'};
+for iColumn = 1:numel(optional)
+    if ismember(optional{iColumn}, data.Properties.VariableNames)
+        matrix(:, end + 1) = data.(optional{iColumn}); %#ok<AGROW>
+    elseif iColumn == 1
+        matrix(:, end + 1) = data.segment_speed_mm_s; %#ok<AGROW>
+    elseif iColumn == 2
+        matrix(:, end + 1) = zeros(height(data), 1); %#ok<AGROW>
+    elseif any(ismember(optional(iColumn + 1:end), data.Properties.VariableNames))
+        error('Named recipe-path group columns require all preceding optional columns.');
+    end
+end
 end
 
 function planTable = localSortOperations(planTable, config)
