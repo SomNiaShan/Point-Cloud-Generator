@@ -27,6 +27,12 @@ function planTable = localPointPlan(data, config)
 rowCount = size(data, 1);
 pauseSeconds = localPauseValues(data, config);
 dwellSeconds = localDwellValues(data, config);
+exposureCounts = localExposureCountValues(data, config);
+sourceRows = repelem((1:rowCount).', exposureCounts);
+data = data(sourceRows, :);
+pauseSeconds = pauseSeconds(sourceRows);
+dwellSeconds = dwellSeconds(sourceRows);
+rowCount = numel(sourceRows);
 planTable = localPlanTable( ...
     repmat("point", rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), ...
     repmat("dwell", rowCount, 1), data(:, 1), data(:, 2), data(:, 3), ...
@@ -34,10 +40,6 @@ planTable = localPlanTable( ...
     data(:, 4), dwellSeconds, pauseSeconds, ...
     repmat(string(config.sourceRecipe), rowCount, 1));
 planTable = localSortOperations(planTable, config);
-if config.exposuresPerPoint > 1
-    rows = repelem((1:height(planTable)).', config.exposuresPerPoint);
-    planTable = planTable(rows, :);
-end
 end
 
 function planTable = localAxisPathPlan(data, config)
@@ -242,12 +244,39 @@ function pauseSeconds = localPauseValues(data, config)
 pauseSeconds = repmat(config.pauseSeconds, size(data, 1), 1);
 scanSpeedColumn = localOptionalColumn(config, 'scanSpeedColumn');
 dwellColumn = localOptionalColumn(config, 'dwellColumn');
-if size(data, 2) >= 5 && scanSpeedColumn ~= 5 && dwellColumn ~= 5
+exposureCountColumn = localOptionalColumn(config, 'exposureCountColumn');
+if size(data, 2) >= 5 && scanSpeedColumn ~= 5 && dwellColumn ~= 5 && ...
+        exposureCountColumn ~= 5
     pauseSeconds = data(:, 5);
 end
 if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
     error('Generated pause values must be finite nonnegative numbers.');
 end
+end
+
+function exposureCounts = localExposureCountValues(data, config)
+exposureCountColumn = localOptionalColumn(config, 'exposureCountColumn');
+if isnan(exposureCountColumn)
+    if ~isfield(config, 'exposuresPerPoint') || isempty(config.exposuresPerPoint)
+        fallbackCount = 1;
+    else
+        fallbackCount = config.exposuresPerPoint;
+    end
+    exposureCounts = repmat(fallbackCount, size(data, 1), 1);
+elseif exposureCountColumn > size(data, 2)
+    error('writingPlanV2:MissingExposureCountColumn', ...
+        'Generated data does not contain configured exposure-count column %d.', ...
+        exposureCountColumn);
+else
+    exposureCounts = data(:, exposureCountColumn);
+end
+
+if any(~isfinite(exposureCounts) | exposureCounts < 1 | exposureCounts > flintmax | ...
+        abs(exposureCounts - round(exposureCounts)) > 1e-9)
+    error('writingPlanV2:InvalidExposureCount', ...
+        'Generated exposure-count values must be positive integers.');
+end
+exposureCounts = round(exposureCounts);
 end
 
 function dwellValues = localDwellValues(data, config)

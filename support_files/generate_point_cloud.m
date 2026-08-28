@@ -20,6 +20,10 @@ if latticeTypeStr == "point_dwell_parameter_matrix"
     [data, prefix, summary] = localGeneratePointDwellParameterMatrixFull(lattice);
     return;
 end
+if latticeTypeStr == "single_exposure_count_parameter_matrix"
+    [data, prefix, summary] = localGenerateSingleExposureCountParameterMatrixFull(lattice);
+    return;
+end
 if latticeTypeStr == "segmented_grating"
     power = localRequireStruct(params, 'power');
     [data, prefix, summary] = localGenerateSegmentedGratingFull(lattice, power);
@@ -110,9 +114,11 @@ function [data, prefix, summary] = localGenerateScanParameterMatrixFull(lattice)
 displayUnit = localDisplayDistanceUnit(lattice);
 unitText = localDistanceUnitText(displayUnit);
 
-nSpeeds = localPositiveInteger(localRequireField(lattice, 'nSpeeds'), 'Speed Count');
-speedStart = localPositiveScalar(localRequireField(lattice, 'speedStartMmPerSecond'), 'Speed start');
-speedEnd = localPositiveScalar(localRequireField(lattice, 'speedEndMmPerSecond'), 'Speed end');
+[speedRows, speedSpacingMode] = localPositiveParameterRows( ...
+    lattice, 'speedSpacingMode', 'speedValuesMmPerSecond', ...
+    'nSpeeds', 'speedStartMmPerSecond', 'speedEndMmPerSecond', ...
+    'Scan-speed values', 'Speed Count', 'Speed start', 'Speed end');
+nSpeeds = numel(speedRows);
 nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
 powerStart = localNonnegativeScalar(localRequireField(lattice, 'powerStart'), 'Power start');
 powerEnd = localNonnegativeScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
@@ -125,11 +131,6 @@ gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Region Ga
 gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Region Gap Y');
 originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
 
-if nSpeeds == 1
-    speedRows = speedStart;
-else
-    speedRows = linspace(speedStart, speedEnd, nSpeeds);
-end
 if nPowers == 1
     powerColumns = powerStart;
 else
@@ -150,8 +151,9 @@ powerValues = zeros(totalPoints, 1);
 speedValues = zeros(totalPoints, 1);
 cursor = 1;
 
-% The physical layout is a parameter map: power increases by column and
-% scan speed increases by row.  Within a region, anchors are row-major.
+% The physical layout is a parameter map: power changes by column and scan
+% speed follows the configured row sequence. Within a region, anchors are
+% row-major.
 for iSpeed = 1:nSpeeds
     regionYUm = originUm(2) + (iSpeed - 1) * strideYUm;
     for iPower = 1:nPowers
@@ -168,8 +170,9 @@ for iSpeed = 1:nSpeeds
 end
 
 data = [xUm / 1000, yUm / 1000, zUm / 1000, powerValues, speedValues];
-prefix = sprintf('scan_matrix_S_%s_to_%s_%d_rows_P_%s_to_%s_%d_cols_%dx%d', ...
-    localCompactNumber(speedStart), localCompactNumber(speedEnd), nSpeeds, ...
+speedTag = localParameterRowsTag('S', speedRows, speedSpacingMode);
+prefix = sprintf('scan_matrix_%s_P_%s_to_%s_%d_cols_%dx%d', ...
+    speedTag, ...
     localCompactNumber(powerStart), localCompactNumber(powerEnd), nPowers, ...
     patchNx, patchNy);
 
@@ -181,6 +184,8 @@ summary.yRangeMm = [min(data(:, 2)), max(data(:, 2))];
 summary.zRangeMm = [min(data(:, 3)), max(data(:, 3))];
 summary.powerRange = [min(powerValues), max(powerValues)];
 summary.scanSpeedRange = [min(speedValues), max(speedValues)];
+summary.scanSpeedValues = speedRows;
+summary.scanSpeedSpacingMode = char(speedSpacingMode);
 summary.latticeType = 'scan_parameter_matrix';
 summary.latticeLabel = sprintf('Scan Parameter Matrix (%d speed rows x %d power columns)', nSpeeds, nPowers);
 summary.pitchLabel = sprintf('Region %dx%d anchors, pitch %s / %s %s, gap %s / %s %s', ...
@@ -195,8 +200,8 @@ summary.pathModeLabel = 'Speed rows, power columns, row-major within each region
 summary.powerMode = 'matrix_columns';
 summary.powerModeLabel = sprintf('%d columns from %s to %s', nPowers, ...
     localCompactNumber(powerStart), localCompactNumber(powerEnd));
-summary.layerTraversalLabel = sprintf('%d scan-speed rows from %s to %s mm/s', nSpeeds, ...
-    localCompactNumber(speedStart), localCompactNumber(speedEnd));
+summary.layerTraversalLabel = localParameterRowsLabel( ...
+    speedRows, speedSpacingMode, 'scan-speed', 'mm/s');
 summary.prefix = prefix;
 end
 
@@ -204,9 +209,11 @@ function [data, prefix, summary] = localGeneratePointDwellParameterMatrixFull(la
 displayUnit = localDisplayDistanceUnit(lattice);
 unitText = localDistanceUnitText(displayUnit);
 
-nDwells = localPositiveInteger(localRequireField(lattice, 'nDwells'), 'Dwell Count');
-dwellStart = localPositiveScalar(localRequireField(lattice, 'dwellStartSeconds'), 'Dwell start');
-dwellEnd = localPositiveScalar(localRequireField(lattice, 'dwellEndSeconds'), 'Dwell end');
+[dwellRows, dwellSpacingMode] = localPositiveParameterRows( ...
+    lattice, 'dwellSpacingMode', 'dwellValuesSeconds', ...
+    'nDwells', 'dwellStartSeconds', 'dwellEndSeconds', ...
+    'Point-dwell values', 'Dwell Count', 'Dwell start', 'Dwell end');
+nDwells = numel(dwellRows);
 nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
 powerStart = localNonnegativeScalar(localRequireField(lattice, 'powerStart'), 'Power start');
 powerEnd = localNonnegativeScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
@@ -219,11 +226,6 @@ gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Region Ga
 gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Region Gap Y');
 originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
 
-if nDwells == 1
-    dwellRows = dwellStart;
-else
-    dwellRows = linspace(dwellStart, dwellEnd, nDwells);
-end
 if nPowers == 1
     powerColumns = powerStart;
 else
@@ -244,7 +246,8 @@ powerValues = zeros(totalPoints, 1);
 dwellValues = zeros(totalPoints, 1);
 cursor = 1;
 
-% Dwell time increases by physical row and power increases by column.
+% Dwell time follows the configured physical-row sequence and power changes
+% by column.
 for iDwell = 1:nDwells
     regionYUm = originUm(2) + (iDwell - 1) * strideYUm;
     for iPower = 1:nPowers
@@ -261,8 +264,9 @@ for iDwell = 1:nDwells
 end
 
 data = [xUm / 1000, yUm / 1000, zUm / 1000, powerValues, dwellValues];
-prefix = sprintf('dwell_matrix_T_%s_to_%s_%d_rows_P_%s_to_%s_%d_cols_%dx%d', ...
-    localCompactNumber(dwellStart), localCompactNumber(dwellEnd), nDwells, ...
+dwellTag = localParameterRowsTag('T', dwellRows, dwellSpacingMode);
+prefix = sprintf('dwell_matrix_%s_P_%s_to_%s_%d_cols_%dx%d', ...
+    dwellTag, ...
     localCompactNumber(powerStart), localCompactNumber(powerEnd), nPowers, ...
     patchNx, patchNy);
 
@@ -274,6 +278,8 @@ summary.yRangeMm = [min(data(:, 2)), max(data(:, 2))];
 summary.zRangeMm = [min(data(:, 3)), max(data(:, 3))];
 summary.powerRange = [min(powerValues), max(powerValues)];
 summary.dwellRange = [min(dwellValues), max(dwellValues)];
+summary.dwellValues = dwellRows;
+summary.dwellSpacingMode = char(dwellSpacingMode);
 summary.latticeType = 'point_dwell_parameter_matrix';
 summary.latticeLabel = sprintf('Point Dwell Parameter Matrix (%d dwell rows x %d power columns)', nDwells, nPowers);
 summary.pitchLabel = sprintf('Region %dx%d points, pitch %s / %s %s, gap %s / %s %s', ...
@@ -288,8 +294,112 @@ summary.pathModeLabel = 'Dwell rows, power columns, row-major within each region
 summary.powerMode = 'matrix_columns';
 summary.powerModeLabel = sprintf('%d columns from %s to %s', nPowers, ...
     localCompactNumber(powerStart), localCompactNumber(powerEnd));
-summary.layerTraversalLabel = sprintf('%d dwell-time rows from %s to %s s', nDwells, ...
-    localCompactNumber(dwellStart), localCompactNumber(dwellEnd));
+summary.layerTraversalLabel = localParameterRowsLabel( ...
+    dwellRows, dwellSpacingMode, 'dwell-time', 's');
+summary.prefix = prefix;
+end
+
+function [data, prefix, summary] = localGenerateSingleExposureCountParameterMatrixFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
+
+[exposureCountRows, exposureCountSpacingMode] = localPositiveIntegerParameterRows( ...
+    lattice, 'exposureCountSpacingMode', 'exposureCountValues', ...
+    'nExposureCounts', 'exposureCountStart', 'exposureCountEnd', ...
+    'Exposure-count values', 'Exposure-count Row Count', ...
+    'Exposure-count start', 'Exposure-count end');
+nExposureCounts = numel(exposureCountRows);
+nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
+powerStart = localNonnegativeScalar(localRequireField(lattice, 'powerStart'), 'Power start');
+powerEnd = localNonnegativeScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
+
+patchNx = localPositiveInteger(localRequireField(lattice, 'patchNx'), 'Region Nx');
+patchNy = localPositiveInteger(localRequireField(lattice, 'patchNy'), 'Region Ny');
+pitchXUm = localPositiveScalar(localRequireField(lattice, 'patchPitchXUm'), 'Region Pitch X');
+pitchYUm = localPositiveScalar(localRequireField(lattice, 'patchPitchYUm'), 'Region Pitch Y');
+gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Region Gap X');
+gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Region Gap Y');
+originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
+
+if nPowers == 1
+    powerColumns = powerStart;
+else
+    powerColumns = linspace(powerStart, powerEnd, nPowers);
+end
+
+patchWidthUm = (patchNx - 1) * pitchXUm;
+patchHeightUm = (patchNy - 1) * pitchYUm;
+strideXUm = patchWidthUm + gapXUm;
+strideYUm = patchHeightUm + gapYUm;
+pointsPerRegion = patchNx * patchNy;
+totalPoints = nExposureCounts * nPowers * pointsPerRegion;
+
+xUm = zeros(totalPoints, 1);
+yUm = zeros(totalPoints, 1);
+zUm = repmat(originUm(3), totalPoints, 1);
+powerValues = zeros(totalPoints, 1);
+exposureCountValues = zeros(totalPoints, 1);
+cursor = 1;
+
+% Exposure count follows the configured physical-row sequence and power
+% changes by column. Each generated point is later expanded into separate
+% fixed-duration exposure operations in the Writing Plan.
+for iExposureCount = 1:nExposureCounts
+    regionYUm = originUm(2) + (iExposureCount - 1) * strideYUm;
+    for iPower = 1:nPowers
+        regionXUm = originUm(1) + (iPower - 1) * strideXUm;
+        for iPatchRow = 1:patchNy
+            rows = cursor:(cursor + patchNx - 1);
+            xUm(rows) = regionXUm + (0:patchNx - 1).' * pitchXUm;
+            yUm(rows) = regionYUm + (iPatchRow - 1) * pitchYUm;
+            powerValues(rows) = powerColumns(iPower);
+            exposureCountValues(rows) = exposureCountRows(iExposureCount);
+            cursor = cursor + patchNx;
+        end
+    end
+end
+
+data = [xUm / 1000, yUm / 1000, zUm / 1000, powerValues, exposureCountValues];
+exposureCountTag = localParameterRowsTag('N', exposureCountRows, exposureCountSpacingMode);
+dwellMicroseconds = single_exposure_dwell_seconds() * 1e6;
+prefix = sprintf('single_exposure_matrix_%s_T_%sus_P_%s_to_%s_%d_cols_%dx%d', ...
+    exposureCountTag, localCompactNumber(dwellMicroseconds), ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd), nPowers, ...
+    patchNx, patchNy);
+
+summary = struct();
+summary.pointCount = totalPoints;
+summary.sourcePointCount = totalPoints;
+summary.plannedExposureCount = pointsPerRegion * nPowers * sum(exposureCountRows);
+summary.xRangeMm = [min(data(:, 1)), max(data(:, 1))];
+summary.yRangeMm = [min(data(:, 2)), max(data(:, 2))];
+summary.zRangeMm = [min(data(:, 3)), max(data(:, 3))];
+summary.powerRange = [min(powerValues), max(powerValues)];
+summary.exposureCountRange = [min(exposureCountValues), max(exposureCountValues)];
+summary.dwellRange = repmat(single_exposure_dwell_seconds(), 1, 2);
+summary.exposureCountValues = exposureCountRows;
+summary.exposureCountSpacingMode = char(exposureCountSpacingMode);
+summary.singleExposureDwellSeconds = single_exposure_dwell_seconds();
+summary.latticeType = 'single_exposure_count_parameter_matrix';
+summary.latticeLabel = sprintf( ...
+    'Single Exposure Count Parameter Matrix (%d count rows x %d power columns; %s us each)', ...
+    nExposureCounts, nPowers, localCompactNumber(dwellMicroseconds));
+summary.pitchLabel = sprintf('Region %dx%d points, pitch %s / %s %s, gap %s / %s %s', ...
+    patchNx, patchNy, localCompactDistance(pitchXUm, displayUnit), ...
+    localCompactDistance(pitchYUm, displayUnit), unitText, ...
+    localCompactDistance(gapXUm, displayUnit), localCompactDistance(gapYUm, displayUnit), unitText);
+summary.rowSpacingUm = pitchYUm;
+summary.regionMode = 'parameter_matrix';
+summary.regionLabel = 'One region per exposure-count/power pair';
+summary.pathMode = 'parameter_matrix';
+summary.pathModeLabel = 'Exposure-count rows, power columns, row-major within each region';
+summary.powerMode = 'matrix_columns';
+summary.powerModeLabel = sprintf('%d columns from %s to %s', nPowers, ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd));
+summary.layerTraversalLabel = sprintf('%s; each exposure uses %s us shutter dwell', ...
+    localParameterRowsLabel(exposureCountRows, exposureCountSpacingMode, ...
+        'exposure-count', 'exposures'), ...
+    localCompactNumber(dwellMicroseconds));
 summary.prefix = prefix;
 end
 
@@ -2098,6 +2208,152 @@ if isfield(structValue, fieldName) && ~isempty(structValue.(fieldName))
     value = structValue.(fieldName);
 else
     value = defaultValue;
+end
+end
+
+function [values, spacingMode] = localPositiveParameterRows( ...
+        config, modeField, valuesField, countField, startField, endField, ...
+        valuesLabel, countLabel, startLabel, endLabel)
+spacingMode = localParameterSpacingMode(config, modeField, valuesLabel);
+
+if spacingMode == "custom"
+    values = localRequireField(config, valuesField);
+    if ~(isnumeric(values) && isreal(values) && isvector(values) && ...
+            ~isempty(values) && all(isfinite(values(:))) && all(values(:) > 0))
+        error('%s must contain one or more finite numeric values greater than 0.', valuesLabel);
+    end
+    values = reshape(double(values), 1, []);
+    return;
+end
+
+count = localPositiveInteger(localRequireField(config, countField), countLabel);
+startValue = localPositiveScalar(localRequireField(config, startField), startLabel);
+endValue = localPositiveScalar(localRequireField(config, endField), endLabel);
+if count == 1
+    values = startValue;
+elseif spacingMode == "exponential"
+    values = exp(linspace(log(startValue), log(endValue), count));
+    values(1) = startValue;
+    values(end) = endValue;
+else
+    values = linspace(startValue, endValue, count);
+end
+end
+
+function [values, spacingMode] = localPositiveIntegerParameterRows( ...
+        config, modeField, valuesField, countField, startField, endField, ...
+        valuesLabel, countLabel, startLabel, endLabel)
+spacingMode = localParameterSpacingMode(config, modeField, valuesLabel);
+
+if spacingMode == "custom"
+    values = localRequireField(config, valuesField);
+    if ~(isnumeric(values) && isreal(values) && isvector(values) && ~isempty(values))
+        error('%s must contain one or more positive integers.', valuesLabel);
+    end
+    values = reshape(double(values), 1, []);
+    if any(~isfinite(values) | values < 1 | values > flintmax | ...
+            abs(values - round(values)) > 1e-9)
+        error('%s must contain only positive integers.', valuesLabel);
+    end
+    values = round(values);
+    return;
+end
+
+count = localExactPositiveInteger(localRequireField(config, countField), countLabel);
+startValue = localExactPositiveInteger(localRequireField(config, startField), startLabel);
+endValue = localExactPositiveInteger(localRequireField(config, endField), endLabel);
+if count == 1
+    rawValues = startValue;
+elseif spacingMode == "exponential"
+    rawValues = exp(linspace(log(startValue), log(endValue), count));
+    rawValues(1) = startValue;
+    rawValues(end) = endValue;
+else
+    rawValues = linspace(startValue, endValue, count);
+    rawValues(1) = startValue;
+    rawValues(end) = endValue;
+end
+
+if any(abs(rawValues - round(rawValues)) > 1e-9)
+    error(['%s spacing produces noninteger exposure-count levels. ', ...
+        'Adjust Start, End, or Row Count, or use a custom list.'], valuesLabel);
+end
+values = round(rawValues);
+
+if numel(unique(values)) ~= count
+    error(['%s range and row count produce duplicate integer levels. ', ...
+        'Reduce the row count, widen the range, or use a custom list.'], valuesLabel);
+end
+end
+
+function spacingMode = localParameterSpacingMode(config, modeField, valuesLabel)
+spacingMode = localNormalizeOption(localFieldOrDefault(config, modeField, 'linear'));
+if ~isscalar(spacingMode)
+    error('%s spacing mode must be a single value.', valuesLabel);
+end
+
+switch spacingMode
+    case {"linear", "linearly_spaced"}
+        spacingMode = "linear";
+    case {"exponential", "logarithmic", "log_spaced", "geometric"}
+        spacingMode = "exponential";
+    case {"custom", "custom_list", "explicit"}
+        spacingMode = "custom";
+    otherwise
+        error('%s spacing mode must be linear, exponential, or custom.', valuesLabel);
+end
+end
+
+function value = localExactPositiveInteger(value, label)
+value = localFiniteScalar(value, label);
+if value < 1 || value > flintmax || abs(value - round(value)) > 1e-9
+    error('%s must be a positive integer.', label);
+end
+value = round(value);
+end
+
+function tag = localParameterRowsTag(parameterCode, values, spacingMode)
+firstValue = localCompactNumber(values(1));
+lastValue = localCompactNumber(values(end));
+rowCount = numel(values);
+switch spacingMode
+    case "linear"
+        tag = sprintf('%s_%s_to_%s_%d_rows', ...
+            parameterCode, firstValue, lastValue, rowCount);
+    case "exponential"
+        tag = sprintf('%s_exp_%s_to_%s_%d_rows', ...
+            parameterCode, firstValue, lastValue, rowCount);
+    case "custom"
+        tag = sprintf('%s_custom_%s_to_%s_%d_rows_h%s', ...
+            parameterCode, firstValue, lastValue, rowCount, localNumericVectorHash(values));
+end
+end
+
+function hashText = localNumericVectorHash(values)
+bytes = typecast(reshape(double(values), [], 1), 'uint8');
+hashValue = uint32(2166136261);
+for iByte = 1:numel(bytes)
+    hashValue = bitxor(hashValue, uint32(bytes(iByte)));
+    hashValue = uint32(mod( ...
+        uint64(hashValue) * uint64(16777619), uint64(4294967296)));
+end
+hashText = lower(dec2hex(hashValue, 8));
+end
+
+function label = localParameterRowsLabel(values, spacingMode, parameterName, unitText)
+switch spacingMode
+    case "linear"
+        label = sprintf('%d linear %s rows from %s to %s %s', ...
+            numel(values), parameterName, localCompactNumber(values(1)), ...
+            localCompactNumber(values(end)), unitText);
+    case "exponential"
+        label = sprintf('%d exponentially spaced %s rows from %s to %s %s', ...
+            numel(values), parameterName, localCompactNumber(values(1)), ...
+            localCompactNumber(values(end)), unitText);
+    case "custom"
+        label = sprintf('%d custom %s rows in entered order (first %s, last %s %s)', ...
+            numel(values), parameterName, localCompactNumber(values(1)), ...
+            localCompactNumber(values(end)), unitText);
 end
 end
 

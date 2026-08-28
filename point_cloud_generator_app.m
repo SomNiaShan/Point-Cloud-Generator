@@ -21,6 +21,7 @@ state.tablePreviewRowLimit = 200;
 state.maxPlotPreviewPoints = 50000;
 state.maxPatternCells = 1000000;
 state.maxPatternPlanRows = 2000000;
+state.maxProceduralPlanRows = 2000000;
 state.maxPatternRecipes = 256;
 state.patternFilePath = "";
 state.patternSheetName = "";
@@ -63,8 +64,8 @@ powerOrderTab.Scrollable = 'on';
 patternTab = uitab(controlTabs, 'Title', 'Excel Pattern');
 patternTab.Scrollable = 'on';
 
-latticeTabGrid = uigridlayout(latticeTab, [38, 1]);
-latticeTabGrid.RowHeight = repmat({'fit'}, 1, 38);
+latticeTabGrid = uigridlayout(latticeTab, [46, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 46);
 latticeTabGrid.ColumnWidth = {'1x'};
 latticeTabGrid.Padding = [6, 6, 6, 6];
 latticeTabGrid.RowSpacing = 4;
@@ -88,7 +89,8 @@ ui = struct();
 latticeGrid = latticeTabGrid;
 
 latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Scan Parameter Matrix', ...
-    'Point Dwell Parameter Matrix', 'Segmented Grating', 'Z Push', ...
+    'Point Dwell Parameter Matrix', 'Single Exposure Count Parameter Matrix', ...
+    'Segmented Grating', 'Z Push', ...
     'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array', 'Circle Release Cut'};
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
     latticeGrid, 'Generator Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
@@ -143,10 +145,16 @@ ui.NPowersField = powerColumnFields(1);
 ui.StaircasePowerStartField = powerColumnFields(2);
 ui.StaircasePowerEndField = powerColumnFields(3);
 
+[ui.ScanTestSpeedModeRow, ui.ScanTestSpeedModeDropDown] = createDropdownRow( ...
+    latticeGrid, 'Speed Row Values', ...
+    {'Linear', 'Exponential (log-spaced)', 'Custom list'}, 'linear', ...
+    @onParameterSweepModeChanged, {'linear', 'exponential', 'custom'}, tips.scanTestMode);
+ui.ScanTestSpeedModeRow.Layout.Row = 35;
+
 [ui.ScanTestSpeedPanel, scanTestSpeedFields] = createValuePanel( ...
     latticeGrid, 'Scan Speed Rows', {'Speed Count', 'Start (mm/s)', 'End (mm/s)'}, ...
     [5, 0.005, 0.025], tips.scanTestSpeed);
-ui.ScanTestSpeedPanel.Layout.Row = 35;
+ui.ScanTestSpeedPanel.Layout.Row = 36;
 ui.ScanTestSpeedCountField = scanTestSpeedFields(1);
 ui.ScanTestSpeedStartField = scanTestSpeedFields(2);
 ui.ScanTestSpeedEndField = scanTestSpeedFields(3);
@@ -154,20 +162,32 @@ for scanTestField = scanTestSpeedFields
     scanTestField.ValueChangedFcn = @onStaircaseParamChanged;
 end
 
+[ui.ScanTestSpeedCustomPanel, ui.ScanTestSpeedValuesArea] = createParameterValuesArea( ...
+    latticeGrid, 'Custom Scan Speeds (mm/s)', {'0.01'; '0.1'; '1'}, tips.scanTestCustomValues);
+ui.ScanTestSpeedCustomPanel.Layout.Row = 37;
+ui.ScanTestSpeedValuesArea.ValueChangedFcn = @onStaircaseParamChanged;
+
 ui.ScanTestHintLabel = uilabel(latticeGrid, ...
-    'Text', ['Parameter layout: scan speed changes by row (+Y), power changes by column (+X). ', ...
+    'Text', ['Parameter layout: the configured scan-speed sequence maps from the first row toward +Y, ', ...
+        'while power changes by column (+X). ', ...
         'Each matrix cell is one region containing the configured Nx-by-Ny scan anchors. ', ...
         'Laser-off lead-in/out defaults to 0.005 mm and can be adjusted under Writing Settings.'], ...
     'WordWrap', 'on', ...
     'FontColor', [0.25, 0.25, 0.25]);
-ui.ScanTestHintLabel.Layout.Row = 36;
+ui.ScanTestHintLabel.Layout.Row = 38;
 ui.ScanTestHintLabel.Layout.Column = 1;
 applyTooltip({ui.ScanTestHintLabel}, tips.scanTestLayout);
+
+[ui.DwellTestModeRow, ui.DwellTestModeDropDown] = createDropdownRow( ...
+    latticeGrid, 'Dwell Row Values', ...
+    {'Linear', 'Exponential (log-spaced)', 'Custom list'}, 'linear', ...
+    @onParameterSweepModeChanged, {'linear', 'exponential', 'custom'}, tips.dwellTestMode);
+ui.DwellTestModeRow.Layout.Row = 39;
 
 [ui.DwellTestTimePanel, dwellTestTimeFields] = createValuePanel( ...
     latticeGrid, 'Point Dwell Rows', {'Dwell Count', 'Start (s)', 'End (s)'}, ...
     [5, 0.05, 0.25], tips.dwellTestTime);
-ui.DwellTestTimePanel.Layout.Row = 37;
+ui.DwellTestTimePanel.Layout.Row = 40;
 ui.DwellTestCountField = dwellTestTimeFields(1);
 ui.DwellTestStartField = dwellTestTimeFields(2);
 ui.DwellTestEndField = dwellTestTimeFields(3);
@@ -175,14 +195,53 @@ for dwellTestField = dwellTestTimeFields
     dwellTestField.ValueChangedFcn = @onStaircaseParamChanged;
 end
 
+[ui.DwellTestCustomPanel, ui.DwellTestValuesArea] = createParameterValuesArea( ...
+    latticeGrid, 'Custom Dwell Times (s)', {'1'; '0.5'; '0.1'}, tips.dwellTestCustomValues);
+ui.DwellTestCustomPanel.Layout.Row = 41;
+ui.DwellTestValuesArea.ValueChangedFcn = @onStaircaseParamChanged;
+
 ui.DwellTestHintLabel = uilabel(latticeGrid, ...
-    'Text', ['Parameter layout: point dwell time changes by row (+Y), power changes by column (+X). ', ...
+    'Text', ['Parameter layout: the configured dwell-time sequence maps from the first row toward +Y, ', ...
+        'while power changes by column (+X). ', ...
         'Each matrix cell is one region containing the configured Nx-by-Ny dwell points.'], ...
     'WordWrap', 'on', ...
     'FontColor', [0.25, 0.25, 0.25]);
-ui.DwellTestHintLabel.Layout.Row = 38;
+ui.DwellTestHintLabel.Layout.Row = 42;
 ui.DwellTestHintLabel.Layout.Column = 1;
 applyTooltip({ui.DwellTestHintLabel}, tips.dwellTestLayout);
+
+[ui.ExposureCountTestModeRow, ui.ExposureCountTestModeDropDown] = createDropdownRow( ...
+    latticeGrid, 'Exposure-count Row Values', ...
+    {'Linear', 'Exponential (log-spaced)', 'Custom list'}, 'linear', ...
+    @onParameterSweepModeChanged, {'linear', 'exponential', 'custom'}, tips.exposureCountTestMode);
+ui.ExposureCountTestModeRow.Layout.Row = 43;
+
+[ui.ExposureCountTestPanel, exposureCountTestFields] = createValuePanel( ...
+    latticeGrid, 'Single Exposure Count Rows', ...
+    {'Row Count', 'Start Exposures', 'End Exposures'}, [5, 1, 5], tips.exposureCountTestValues);
+ui.ExposureCountTestPanel.Layout.Row = 44;
+ui.ExposureCountTestRowCountField = exposureCountTestFields(1);
+ui.ExposureCountTestStartField = exposureCountTestFields(2);
+ui.ExposureCountTestEndField = exposureCountTestFields(3);
+for exposureCountTestField = exposureCountTestFields
+    exposureCountTestField.ValueChangedFcn = @onStaircaseParamChanged;
+end
+
+[ui.ExposureCountTestCustomPanel, ui.ExposureCountTestValuesArea] = createParameterValuesArea( ...
+    latticeGrid, 'Custom Exposure Counts', {'1'; '2'; '5'; '10'}, ...
+    tips.exposureCountTestCustomValues);
+ui.ExposureCountTestCustomPanel.Layout.Row = 45;
+ui.ExposureCountTestValuesArea.ValueChangedFcn = @onStaircaseParamChanged;
+
+ui.ExposureCountTestHintLabel = uilabel(latticeGrid, ...
+    'Text', ['Each matrix point is expanded into the configured number of separate exposures. ', ...
+        'Every exposure opens the shutter for a fixed 200 us; laser PP must be configured externally for one pulse. ', ...
+        'Rows map from the first row toward +Y and power changes by column (+X).'], ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.25, 0.25, 0.25]);
+ui.ExposureCountTestHintLabel.Layout.Row = 46;
+ui.ExposureCountTestHintLabel.Layout.Column = 1;
+applyTooltip({ui.ExposureCountTestHintLabel}, tips.exposureCountTestLayout);
 
 [ui.PatchCountsPanel, patchCountFields] = createValuePanel( ...
     latticeGrid, 'Patch Counts', {'Nx', 'Ny'}, [5, 5], tips.patchCounts);
@@ -848,6 +907,7 @@ applyCompactFonts(fig);
         isStaircase = latticeType == "Staircase";
         isScanTestMatrix = latticeType == "Scan Parameter Matrix";
         isDwellTestMatrix = latticeType == "Point Dwell Parameter Matrix";
+        isExposureCountTestMatrix = latticeType == "Single Exposure Count Parameter Matrix";
         isGrating = latticeType == "Segmented Grating";
         isZPush = latticeType == "Z Push";
         isHexCut = latticeType == "Hexagon Cut";
@@ -858,7 +918,8 @@ applyCompactFonts(fig);
         isReleaseMode = isHexReleaseMode || isCircleReleaseCut;
         isCutMode = isHexCut || isReleaseMode;
         showHexGeometry = isHexCut || isHexReleaseMode;
-        isFixedOrder = isStaircase || isScanTestMatrix || isDwellTestMatrix || isGrating || isZPush || isCutMode;
+        isFixedOrder = isStaircase || isScanTestMatrix || isDwellTestMatrix || ...
+            isExposureCountTestMatrix || isGrating || isZPush || isCutMode;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
@@ -867,13 +928,16 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 'fit', showCartesian);
         setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 'fit', showHexPitch);
         setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ...
-            (~isStaircase && ~isZPush && ~isCutMode) || isScanTestMatrix || isDwellTestMatrix);
+            (~isStaircase && ~isZPush && ~isCutMode) || isScanTestMatrix || ...
+            isDwellTestMatrix || isExposureCountTestMatrix);
         setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 'fit', showHcpShift);
         setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 'fit', isStaircase);
-        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
-        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
-        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
-        setPanelRow(latticeGrid, 11, ui.GapPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
+        showParameterMatrixGeometry = isStaircase || isScanTestMatrix || ...
+            isDwellTestMatrix || isExposureCountTestMatrix;
+        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', showParameterMatrixGeometry);
+        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 'fit', showParameterMatrixGeometry);
+        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 'fit', showParameterMatrixGeometry);
+        setPanelRow(latticeGrid, 11, ui.GapPanel, 'fit', showParameterMatrixGeometry);
         setPanelRow(latticeGrid, 12, ui.StaircaseOriginPanel, 'fit', isStaircase);
         setPanelRow(latticeGrid, 13, ui.GratingAxesPanel, 'fit', isGrating);
         setPanelRow(latticeGrid, 14, ui.GratingDepthPanel, 'fit', isGrating);
@@ -919,13 +983,11 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isReleaseMode);
         setPanelRow(latticeGrid, 33, ui.HexArraySizePanel, 'fit', isHexReleaseArray);
         setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
-        setPanelRow(latticeGrid, 35, ui.ScanTestSpeedPanel, 'fit', isScanTestMatrix);
-        setPanelRow(latticeGrid, 36, ui.ScanTestHintLabel, 'fit', isScanTestMatrix);
-        setPanelRow(latticeGrid, 37, ui.DwellTestTimePanel, 'fit', isDwellTestMatrix);
-        setPanelRow(latticeGrid, 38, ui.DwellTestHintLabel, 'fit', isDwellTestMatrix);
+        updateParameterSweepVisibility();
 
         setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ...
-            ~isStaircase && ~isScanTestMatrix && ~isDwellTestMatrix && ~isCutMode);
+            ~isStaircase && ~isScanTestMatrix && ~isDwellTestMatrix && ...
+            ~isExposureCountTestMatrix && ~isCutMode);
         setPanelRow(powerOrderGrid, 2, ui.OrderingPanel, 'fit', true);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
         setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isCutMode);
@@ -938,7 +1000,7 @@ applyCompactFonts(fig);
                 syncGratingScanAxis();
             end
             onPlanParamChanged();
-        elseif isDwellTestMatrix
+        elseif isDwellTestMatrix || isExposureCountTestMatrix
             ui.ExposureModeDropDown.Value = 'Point dwell';
             onPlanParamChanged();
         elseif isZPush
@@ -1014,6 +1076,8 @@ applyCompactFonts(fig);
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
         isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
         isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
+        isExposureCountTestMatrix = string(ui.LatticeTypeDropDown.Value) == ...
+            "Single Exposure Count Parameter Matrix";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         if isExcelPatternMode()
             return;
@@ -1023,13 +1087,15 @@ applyCompactFonts(fig);
             if isGrating
                 syncGratingScanAxis();
             end
-        elseif isZPush || isDwellTestMatrix
+        elseif isZPush || isDwellTestMatrix || isExposureCountTestMatrix
             ui.ExposureModeDropDown.Value = 'Point dwell';
         end
 
         isScan = string(ui.ExposureModeDropDown.Value) == "Axis scan";
-        setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ~isScan && ~isDwellTestMatrix);
-        setPanelRow(planGrid, 3, ui.PointExposureCountRow, 'fit', ~isScan);
+        setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ...
+            ~isScan && ~isDwellTestMatrix && ~isExposureCountTestMatrix);
+        setPanelRow(planGrid, 3, ui.PointExposureCountRow, 'fit', ...
+            ~isScan && ~isExposureCountTestMatrix);
         setPanelRow(planGrid, 4, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
         setPanelRow(planGrid, 5, ui.ScanDirectionRow, 'fit', isScan);
         setPanelRow(planGrid, 6, ui.ScanAnchorRow, 'fit', isScan);
@@ -1054,6 +1120,36 @@ applyCompactFonts(fig);
 
     function onStaircaseParamChanged(~, ~)
         updateTraversalNote();
+    end
+
+    function onParameterSweepModeChanged(~, ~)
+        updateParameterSweepVisibility();
+        updateTraversalNote();
+    end
+
+    function updateParameterSweepVisibility()
+        latticeType = string(ui.LatticeTypeDropDown.Value);
+        isScanTestMatrix = latticeType == "Scan Parameter Matrix";
+        isDwellTestMatrix = latticeType == "Point Dwell Parameter Matrix";
+        isExposureCountTestMatrix = latticeType == "Single Exposure Count Parameter Matrix";
+        isCustomScan = string(ui.ScanTestSpeedModeDropDown.Value) == "custom";
+        isCustomDwell = string(ui.DwellTestModeDropDown.Value) == "custom";
+        isCustomExposureCount = string(ui.ExposureCountTestModeDropDown.Value) == "custom";
+
+        setPanelRow(latticeGrid, 35, ui.ScanTestSpeedModeRow, 'fit', isScanTestMatrix);
+        setPanelRow(latticeGrid, 36, ui.ScanTestSpeedPanel, 'fit', isScanTestMatrix && ~isCustomScan);
+        setPanelRow(latticeGrid, 37, ui.ScanTestSpeedCustomPanel, 92, isScanTestMatrix && isCustomScan);
+        setPanelRow(latticeGrid, 38, ui.ScanTestHintLabel, 'fit', isScanTestMatrix);
+        setPanelRow(latticeGrid, 39, ui.DwellTestModeRow, 'fit', isDwellTestMatrix);
+        setPanelRow(latticeGrid, 40, ui.DwellTestTimePanel, 'fit', isDwellTestMatrix && ~isCustomDwell);
+        setPanelRow(latticeGrid, 41, ui.DwellTestCustomPanel, 92, isDwellTestMatrix && isCustomDwell);
+        setPanelRow(latticeGrid, 42, ui.DwellTestHintLabel, 'fit', isDwellTestMatrix);
+        setPanelRow(latticeGrid, 43, ui.ExposureCountTestModeRow, 'fit', isExposureCountTestMatrix);
+        setPanelRow(latticeGrid, 44, ui.ExposureCountTestPanel, 'fit', ...
+            isExposureCountTestMatrix && ~isCustomExposureCount);
+        setPanelRow(latticeGrid, 45, ui.ExposureCountTestCustomPanel, 92, ...
+            isExposureCountTestMatrix && isCustomExposureCount);
+        setPanelRow(latticeGrid, 46, ui.ExposureCountTestHintLabel, 'fit', isExposureCountTestMatrix);
     end
 
     function onGratingAxisChanged(~, ~)
@@ -2238,6 +2334,12 @@ applyCompactFonts(fig);
 
             params = collectParams();
             [data, prefix, summary] = generate_point_cloud(params);
+            if isfield(summary, 'plannedExposureCount') && ...
+                    summary.plannedExposureCount > state.maxProceduralPlanRows
+                error(['The configured exposure-count matrix would create %d Writing Plan rows, ', ...
+                    'which exceeds the app limit of %d. Reduce exposure counts, powers, or region size.'], ...
+                    summary.plannedExposureCount, state.maxProceduralPlanRows);
+            end
             state.generatedData = data;
             state.generatedPrefix = prefix;
             state.generatedSummary = summary;
@@ -2346,10 +2448,55 @@ applyCompactFonts(fig);
         params.lattice.type = latticeType;
         params.lattice.displayDistanceUnit = 'mm';
 
-        if latticeType == "Point Dwell Parameter Matrix"
-            params.lattice.nDwells = round(max(1, ui.DwellTestCountField.Value));
-            params.lattice.dwellStartSeconds = ui.DwellTestStartField.Value;
-            params.lattice.dwellEndSeconds = ui.DwellTestEndField.Value;
+        if latticeType == "Single Exposure Count Parameter Matrix"
+            exposureCountSpacingMode = string(ui.ExposureCountTestModeDropDown.Value);
+            params.lattice.exposureCountSpacingMode = exposureCountSpacingMode;
+            if exposureCountSpacingMode == "custom"
+                exposureCountValues = parse_parameter_row_values( ...
+                    ui.ExposureCountTestValuesArea.Value, 'Custom exposure counts');
+                exposureCountValues = validatePositiveIntegerVector( ...
+                    exposureCountValues, 'Custom exposure counts');
+                params.lattice.exposureCountValues = exposureCountValues;
+                params.lattice.nExposureCounts = numel(exposureCountValues);
+                params.lattice.exposureCountStart = exposureCountValues(1);
+                params.lattice.exposureCountEnd = exposureCountValues(end);
+            else
+                rowCount = validatePositiveIntegerVector( ...
+                    ui.ExposureCountTestRowCountField.Value, 'Exposure-count row count');
+                endpoints = validatePositiveIntegerVector([ ...
+                    ui.ExposureCountTestStartField.Value; ...
+                    ui.ExposureCountTestEndField.Value], 'Exposure-count start/end');
+                params.lattice.nExposureCounts = rowCount;
+                params.lattice.exposureCountStart = endpoints(1);
+                params.lattice.exposureCountEnd = endpoints(2);
+                ui.ExposureCountTestRowCountField.Value = rowCount;
+            end
+            params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
+            params.lattice.powerStart = ui.StaircasePowerStartField.Value;
+            params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
+            params.lattice.patchNx = round(max(1, ui.PatchNxField.Value));
+            params.lattice.patchNy = round(max(1, ui.PatchNyField.Value));
+            params.lattice.patchPitchXUm = mmToUm(ui.PatchPitchXField.Value);
+            params.lattice.patchPitchYUm = mmToUm(ui.PatchPitchYField.Value);
+            params.lattice.gapXUm = mmToUm(ui.GapXField.Value);
+            params.lattice.gapYUm = mmToUm(ui.GapYField.Value);
+            params.lattice.originUm = mmToUm([ui.OriginXField.Value, ...
+                ui.OriginYField.Value, ui.OriginZField.Value]);
+        elseif latticeType == "Point Dwell Parameter Matrix"
+            dwellSpacingMode = string(ui.DwellTestModeDropDown.Value);
+            params.lattice.dwellSpacingMode = dwellSpacingMode;
+            if dwellSpacingMode == "custom"
+                dwellValues = parse_parameter_row_values( ...
+                    ui.DwellTestValuesArea.Value, 'Custom dwell times');
+                params.lattice.dwellValuesSeconds = dwellValues;
+                params.lattice.nDwells = numel(dwellValues);
+                params.lattice.dwellStartSeconds = dwellValues(1);
+                params.lattice.dwellEndSeconds = dwellValues(end);
+            else
+                params.lattice.nDwells = round(max(1, ui.DwellTestCountField.Value));
+                params.lattice.dwellStartSeconds = ui.DwellTestStartField.Value;
+                params.lattice.dwellEndSeconds = ui.DwellTestEndField.Value;
+            end
             params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
             params.lattice.powerStart = ui.StaircasePowerStartField.Value;
             params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
@@ -2361,9 +2508,20 @@ applyCompactFonts(fig);
             params.lattice.gapYUm = mmToUm(ui.GapYField.Value);
             params.lattice.originUm = mmToUm([ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value]);
         elseif latticeType == "Scan Parameter Matrix"
-            params.lattice.nSpeeds = round(max(1, ui.ScanTestSpeedCountField.Value));
-            params.lattice.speedStartMmPerSecond = ui.ScanTestSpeedStartField.Value;
-            params.lattice.speedEndMmPerSecond = ui.ScanTestSpeedEndField.Value;
+            speedSpacingMode = string(ui.ScanTestSpeedModeDropDown.Value);
+            params.lattice.speedSpacingMode = speedSpacingMode;
+            if speedSpacingMode == "custom"
+                speedValues = parse_parameter_row_values( ...
+                    ui.ScanTestSpeedValuesArea.Value, 'Custom scan speeds');
+                params.lattice.speedValuesMmPerSecond = speedValues;
+                params.lattice.nSpeeds = numel(speedValues);
+                params.lattice.speedStartMmPerSecond = speedValues(1);
+                params.lattice.speedEndMmPerSecond = speedValues(end);
+            else
+                params.lattice.nSpeeds = round(max(1, ui.ScanTestSpeedCountField.Value));
+                params.lattice.speedStartMmPerSecond = ui.ScanTestSpeedStartField.Value;
+                params.lattice.speedEndMmPerSecond = ui.ScanTestSpeedEndField.Value;
+            end
             params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
             params.lattice.powerStart = ui.StaircasePowerStartField.Value;
             params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
@@ -2588,6 +2746,8 @@ applyCompactFonts(fig);
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
         isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
         isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
+        isExposureCountTestMatrix = string(ui.LatticeTypeDropDown.Value) == ...
+            "Single Exposure Count Parameter Matrix";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
         isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
@@ -2601,14 +2761,29 @@ applyCompactFonts(fig);
         else
             planConfig.profile = "axis_path";
         end
-        if isDwellTestMatrix
-            planConfig.dwellSeconds = validatePositiveScalar(ui.DwellTestStartField.Value, 'Dwell start');
+        if isExposureCountTestMatrix
+            planConfig.dwellSeconds = single_exposure_dwell_seconds();
+        elseif isDwellTestMatrix
+            if string(ui.DwellTestModeDropDown.Value) == "custom"
+                dwellValues = parse_parameter_row_values( ...
+                    ui.DwellTestValuesArea.Value, 'Custom dwell times');
+                planConfig.dwellSeconds = dwellValues(1);
+            else
+                planConfig.dwellSeconds = validatePositiveScalar( ...
+                    ui.DwellTestStartField.Value, 'Dwell start');
+            end
             planConfig.dwellColumn = 5;
         else
             planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
         end
-        planConfig.exposuresPerPoint = validatePositiveInteger(ui.PointExposureCountField.Value, 'Exposures per point');
-        ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
+        if isExposureCountTestMatrix
+            planConfig.exposuresPerPoint = 1;
+            planConfig.exposureCountColumn = 5;
+        else
+            planConfig.exposuresPerPoint = validatePositiveInteger( ...
+                ui.PointExposureCountField.Value, 'Exposures per point');
+            ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
+        end
         planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
         planConfig.scanDirection = normalizePlanOption(ui.ScanDirectionDropDown.Value);
         planConfig.scanAnchor = normalizePlanOption(ui.ScanAnchorDropDown.Value);
@@ -2618,8 +2793,14 @@ applyCompactFonts(fig);
             planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length'));
         end
         if isScanTestMatrix
-            planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
-                ui.ScanTestSpeedStartField.Value, 'Scan speed start');
+            if string(ui.ScanTestSpeedModeDropDown.Value) == "custom"
+                speedValues = parse_parameter_row_values( ...
+                    ui.ScanTestSpeedValuesArea.Value, 'Custom scan speeds');
+                planConfig.scanSpeedMmPerSecond = speedValues(1);
+            else
+                planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
+                    ui.ScanTestSpeedStartField.Value, 'Scan speed start');
+            end
             planConfig.scanSpeedColumn = 5;
         else
             planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
@@ -2627,7 +2808,7 @@ applyCompactFonts(fig);
         planConfig.scanLeadInMm = validateNonnegativeScalar(ui.ScanLeadInField.Value, 'Scan lead-in');
         planConfig.scanLeadOutMm = validateNonnegativeScalar(ui.ScanLeadOutField.Value, 'Scan lead-out');
         planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
-        planConfig.preserveOrder = isGrating || isZPush;
+        planConfig.preserveOrder = isGrating || isZPush || isExposureCountTestMatrix;
         latticeRecipe = normalizePlanOption(ui.LatticeTypeDropDown.Value);
 
         if isGrating
@@ -2636,6 +2817,8 @@ applyCompactFonts(fig);
         elseif isScanTestMatrix
             planConfig.profile = "axis_path";
         elseif isDwellTestMatrix
+            planConfig.profile = "point";
+        elseif isExposureCountTestMatrix
             planConfig.profile = "point";
         elseif isZPush
             planConfig.profile = "point";
@@ -2844,24 +3027,42 @@ applyCompactFonts(fig);
             return;
         end
 
-        if latticeType == "Scan Parameter Matrix"
-            speedCount = round(max(1, ui.ScanTestSpeedCountField.Value));
+        if latticeType == "Single Exposure Count Parameter Matrix"
             powerCount = round(max(1, ui.NPowersField.Value));
+            exposureCountSummary = exposureCountSweepUiSummary();
             ui.TraversalNoteLabel.Text = sprintf([ ...
-                'Traversal: %d speed row(s) from %.6g to %.6g mm/s along +Y; ', ...
+                'Traversal: %s mapped from the first row toward +Y; ', ...
+                '%d power column(s) from %.6g to %.6g along +X; ', ...
+                'each point becomes separate 200 us shutter exposures.'], ...
+                exposureCountSummary, powerCount, ...
+                ui.StaircasePowerStartField.Value, ui.StaircasePowerEndField.Value);
+            return;
+        end
+
+        if latticeType == "Scan Parameter Matrix"
+            powerCount = round(max(1, ui.NPowersField.Value));
+            speedSummary = parameterSweepUiSummary( ...
+                ui.ScanTestSpeedModeDropDown, ui.ScanTestSpeedCountField, ...
+                ui.ScanTestSpeedStartField, ui.ScanTestSpeedEndField, ...
+                ui.ScanTestSpeedValuesArea, 'scan-speed', 'mm/s');
+            ui.TraversalNoteLabel.Text = sprintf([ ...
+                'Traversal: %s mapped from the first row toward +Y; ', ...
                 '%d power column(s) from %.6g to %.6g along +X; row-major anchors within each region.'], ...
-                speedCount, ui.ScanTestSpeedStartField.Value, ui.ScanTestSpeedEndField.Value, ...
+                speedSummary, ...
                 powerCount, ui.StaircasePowerStartField.Value, ui.StaircasePowerEndField.Value);
             return;
         end
 
         if latticeType == "Point Dwell Parameter Matrix"
-            dwellCount = round(max(1, ui.DwellTestCountField.Value));
             powerCount = round(max(1, ui.NPowersField.Value));
+            dwellSummary = parameterSweepUiSummary( ...
+                ui.DwellTestModeDropDown, ui.DwellTestCountField, ...
+                ui.DwellTestStartField, ui.DwellTestEndField, ...
+                ui.DwellTestValuesArea, 'dwell-time', 's');
             ui.TraversalNoteLabel.Text = sprintf([ ...
-                'Traversal: %d dwell-time row(s) from %.6g to %.6g s along +Y; ', ...
+                'Traversal: %s mapped from the first row toward +Y; ', ...
                 '%d power column(s) from %.6g to %.6g along +X; row-major points within each region.'], ...
-                dwellCount, ui.DwellTestStartField.Value, ui.DwellTestEndField.Value, ...
+                dwellSummary, ...
                 powerCount, ui.StaircasePowerStartField.Value, ui.StaircasePowerEndField.Value);
             return;
         end
@@ -2905,6 +3106,61 @@ applyCompactFonts(fig);
         end
 
         ui.TraversalNoteLabel.Text = ['Traversal: ', detailText, ' Within each layer, write the channel matrix row by row and column by column; each channel writes segment 1 before segment 2, and the scan axis is inferred from the remaining coordinate axis.'];
+    end
+
+    function summaryText = parameterSweepUiSummary( ...
+            modeDropDown, countField, startField, endField, valuesArea, parameterName, unitText)
+        spacingMode = string(modeDropDown.Value);
+        if spacingMode == "custom"
+            try
+                values = parse_parameter_row_values(valuesArea.Value, ['Custom ', parameterName, ' values']);
+                summaryText = sprintf('%d custom %s row(s) in entered order (first %.6g, last %.6g %s)', ...
+                    numel(values), parameterName, values(1), values(end), unitText);
+            catch err
+                summaryText = ['invalid custom ', parameterName, ' rows (', err.message, ')'];
+            end
+            return;
+        end
+
+        count = round(max(1, countField.Value));
+        if spacingMode == "exponential"
+            spacingText = 'exponentially spaced';
+        else
+            spacingText = 'linear';
+        end
+        summaryText = sprintf('%d %s %s row(s), %.6g to %.6g %s', ...
+            count, spacingText, parameterName, startField.Value, endField.Value, unitText);
+    end
+
+    function summaryText = exposureCountSweepUiSummary()
+        spacingMode = string(ui.ExposureCountTestModeDropDown.Value);
+        try
+            if spacingMode == "custom"
+                values = parse_parameter_row_values( ...
+                    ui.ExposureCountTestValuesArea.Value, 'Custom exposure counts');
+                values = validatePositiveIntegerVector(values, 'Custom exposure counts');
+                summaryText = sprintf([ ...
+                    '%d custom exposure-count row(s) in entered order ', ...
+                    '(first %d, last %d exposures)'], ...
+                    numel(values), values(1), values(end));
+                return;
+            end
+
+            rowCount = validatePositiveIntegerVector( ...
+                ui.ExposureCountTestRowCountField.Value, 'Exposure-count row count');
+            endpoints = validatePositiveIntegerVector([ ...
+                ui.ExposureCountTestStartField.Value; ...
+                ui.ExposureCountTestEndField.Value], 'Exposure-count start/end');
+            if spacingMode == "exponential"
+                spacingText = 'exponentially spaced';
+            else
+                spacingText = 'linear';
+            end
+            summaryText = sprintf('%d %s exposure-count row(s), %d to %d exposures', ...
+                rowCount, spacingText, endpoints(1), endpoints(2));
+        catch err
+            summaryText = ['invalid exposure-count rows (', err.message, ')'];
+        end
     end
 end
 
@@ -2993,6 +3249,18 @@ if ~(isscalar(value) && isnumeric(value) && isfinite(value) && value >= 1)
     error('%s must be a finite positive integer.', label);
 end
 value = round(value);
+end
+
+function values = validatePositiveIntegerVector(values, label)
+if ~(isnumeric(values) && isreal(values) && isvector(values) && ~isempty(values))
+    error('%s must contain one or more positive integers.', label);
+end
+values = double(values(:));
+if any(~isfinite(values) | values < 1 | values > flintmax | ...
+        abs(values - round(values)) > 1e-9)
+    error('%s must contain only positive integers.', label);
+end
+values = round(values);
 end
 
 function value = normalizePlanOption(value)
@@ -3094,18 +3362,37 @@ tips.powerColumns = { ...
     'Number of power columns in Staircase or either Parameter Matrix mode.', ...
     'Power value used by the first column.', ...
     'Power value used by the last column; intermediate columns are interpolated linearly.'};
+tips.scanTestMode = ['Linear uses equal numeric increments; Exponential uses equal increments on a logarithmic scale; ', ...
+    'Custom list maps one entered value to each physical row in the entered order.'];
 tips.scanTestSpeed = { ...
-    'Number of scan-speed rows in the parameter matrix.', ...
+    'Number of scan-speed rows in Linear or Exponential mode.', ...
     'Scan speed used by the first matrix row, in mm/s; must be positive.', ...
-    'Scan speed used by the last matrix row, in mm/s; intermediate rows are interpolated linearly.'};
+    'Scan speed used by the last matrix row, in mm/s; intermediate rows follow the selected spacing mode.'};
+tips.scanTestCustomValues = ['Enter one positive scan speed in mm/s per line. ', ...
+    'The first line maps to the first physical row, and later lines advance toward +Y.'];
 tips.scanTestLayout = ['Each speed-power combination occupies one separate XY region. ', ...
     'The Writing Plan stores the selected speed and power on every exposed scan and its optional lead segments.'];
+tips.dwellTestMode = ['Linear uses equal numeric increments; Exponential uses equal increments on a logarithmic scale; ', ...
+    'Custom list maps one entered value to each physical row in the entered order.'];
 tips.dwellTestTime = { ...
-    'Number of point-dwell-time rows in the parameter matrix.', ...
+    'Number of point-dwell-time rows in Linear or Exponential mode.', ...
     'Point dwell time used by the first matrix row, in seconds; must be positive.', ...
-    'Point dwell time used by the last matrix row, in seconds; intermediate rows are interpolated linearly.'};
+    'Point dwell time used by the last matrix row, in seconds; intermediate rows follow the selected spacing mode.'};
+tips.dwellTestCustomValues = ['Enter one positive dwell time in seconds per line. ', ...
+    'The first line maps to the first physical row, and later lines advance toward +Y.'];
 tips.dwellTestLayout = ['Each dwell-power combination occupies one separate XY region. ', ...
     'The Writing Plan stores the selected dwell time and power on every point operation.'];
+tips.exposureCountTestMode = ['Linear and Exponential generate discrete exposure-count levels between Start and End; ', ...
+    'every resulting level must be a positive integer. Custom list preserves the entered integer order.'];
+tips.exposureCountTestValues = { ...
+    'Number of exposure-count rows in Linear or Exponential mode.', ...
+    'Number of separate 200 us shutter exposures at every point in the first matrix row; must be a positive integer.', ...
+    'Number of separate 200 us shutter exposures at every point in the last matrix row; must be a positive integer.'};
+tips.exposureCountTestCustomValues = ['Enter one positive integer exposure count per line. ', ...
+    'The first line maps to the first physical row, and later lines advance toward +Y.'];
+tips.exposureCountTestLayout = ['Each exposure-count/power combination occupies one separate XY region. ', ...
+    'The Writing Plan expands every point into consecutive point operations with a fixed 200 us dwell. ', ...
+    'The app does not configure or verify laser PP; set PP externally for the intended single-pulse condition.'];
 tips.patchCounts = { ...
     'Number of scan anchors along X in each Staircase patch or parameter-test region.', ...
     'Number of scan anchors along Y in each Staircase patch or parameter-test region.'};
@@ -3378,6 +3665,23 @@ field = uieditfield(grid, 'text', 'Value', defaultValue);
 field.Layout.Row = 1;
 field.Layout.Column = 2;
 applyTooltip({rowPanel, label, field}, tooltipText);
+end
+
+function [panel, area] = createParameterValuesArea(parent, titleText, defaultValues, tooltipText)
+if nargin < 4
+    tooltipText = '';
+end
+
+panel = uipanel(parent, 'Title', titleText);
+grid = uigridlayout(panel, [1, 1]);
+grid.RowHeight = {'1x'};
+grid.ColumnWidth = {'1x'};
+grid.Padding = [5, 5, 5, 5];
+
+area = uitextarea(grid, 'Value', defaultValues);
+area.Layout.Row = 1;
+area.Layout.Column = 1;
+applyTooltip({panel, area}, tooltipText);
 end
 
 function [panel, fields] = createValuePanel(parent, titleText, labelTexts, defaultValues, tooltipTexts)

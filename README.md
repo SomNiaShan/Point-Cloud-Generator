@@ -21,7 +21,12 @@ Choose `Scan Parameter Matrix` under `Generator Type` to process a grid of
 separate test regions in one writing plan. The physical and parameter layout
 is deliberately aligned:
 
-- Rows advance along +Y and linearly sweep scan speed from `Start` to `End`.
+- Rows advance along +Y and use the selected scan-speed row mode:
+  - `Linear` divides `Start` to `End` into equal numeric increments.
+  - `Exponential (log-spaced)` divides the positive range into equal ratios;
+    for example, `0.01`, `0.1`, `1`.
+  - `Custom list` accepts one positive speed per line and preserves the entered
+    order exactly. The first line maps to the first physical row.
 - Columns advance along +X and linearly sweep power from `P Start` to `P End`.
 - Every speed-power combination is one region containing an `Nx`-by-`Ny`
   array of scan anchors. `Patch Pitch` controls anchor spacing and `Gap`
@@ -34,15 +39,20 @@ is deliberately aligned:
   the exposed line; adjust both distances under `Writing Settings` as needed.
 
 The generator forces `Axis scan` exposure for this mode. A single speed row or
-power column is allowed; in that case the corresponding `Start` value is used.
+power column is allowed; range modes use the corresponding `Start` value, while
+Custom list mode derives the row count from the number of entered values.
 
 ## Point Dwell Parameter Matrix
 
 Choose `Point Dwell Parameter Matrix` to test point exposure conditions across
 multiple regions:
 
-- Rows advance along +Y and linearly sweep point dwell time from `Start` to
-  `End`.
+- Rows advance along +Y and use the selected dwell-time row mode:
+  - `Linear` divides `Start` to `End` into equal numeric increments.
+  - `Exponential (log-spaced)` divides the positive range into equal ratios;
+    for example, `0.01`, `0.1`, `1` seconds.
+  - `Custom list` accepts one positive dwell time per line and preserves the
+    entered order exactly. The first line maps to the first physical row.
 - Columns advance along +X and linearly sweep power from `P Start` to `P End`.
 - Every dwell-power combination is one region containing an `Nx`-by-`Ny`
   point array. Pitch, region gap, origin, exposures per point, and pre-write
@@ -51,7 +61,31 @@ multiple regions:
   the Writing Plan.
 
 This mode forces `Point dwell` exposure. A single dwell row or power column is
-allowed and uses its corresponding `Start` value.
+allowed; range modes use the corresponding `Start` value, while Custom list
+mode derives the row count from the number of entered values.
+
+## Single Exposure Count Parameter Matrix
+
+Choose `Single Exposure Count Parameter Matrix` to test the number of separate
+single-exposure operations against laser power:
+
+- Rows advance along +Y and vary the number of exposures at every point.
+  Exposure counts must be positive integers. Linear and Exponential modes are
+  accepted only when every generated level is an integer; use Custom list for
+  arbitrary sequences such as `1`, `2`, `5`, `10`.
+- Columns advance along +X and linearly sweep power from `P Start` to `P End`.
+- Every exposure-count/power combination is one separate `Nx`-by-`Ny` region.
+- Each point is expanded into the configured number of consecutive Writing
+  Plan point rows. Every row uses a fixed shutter dwell of `0.0002 s` (`200 us`).
+- Each repeated row is a separate move/pause/expose operation. The configured
+  pre-write pause therefore applies before every exposure; set it to zero if
+  no additional inter-exposure wait is required.
+- The app rejects settings that would expand beyond 2,000,000 Writing Plan
+  rows; reduce exposure counts, power columns, or points per region if needed.
+
+The app fixes only the timed shutter gate. Laser PP/frequency must be configured
+externally to obtain one physical pulse in each 200-us window; the Writing Plan
+does not configure or verify the pulse count.
 
 ## Excel Recipe Patterns
 

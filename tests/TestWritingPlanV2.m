@@ -98,6 +98,85 @@ classdef TestWritingPlanV2 < matlab.unittest.TestCase
                 'AbsTol', 1e-12);
         end
 
+        function generatedPointsExpandPerRowExposureCounts(testCase)
+            data = [1, 2, 0.3, 10, 3; 4, 5, 0.6, 20, 1];
+            config = localExposureCountConfig();
+
+            actual = writing_plan_v2_from_generated_data(data, config);
+
+            testCase.verifyEqual(height(actual), 4);
+            testCase.verifyEqual(actual.x_mm, [1; 1; 1; 4]);
+            testCase.verifyEqual(actual.y_mm, [2; 2; 2; 5]);
+            testCase.verifyEqual(actual.z_mm, [0.3; 0.3; 0.3; 0.6], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(actual.power, [10; 10; 10; 20]);
+            testCase.verifyEqual(actual.dwell_s, repmat(200e-6, 4, 1), ...
+                'AbsTol', 1e-15);
+        end
+
+        function exposureCountExpansionKeepsAssociationWhenSorted(testCase)
+            data = [11, 0, 0.5, 10, 2; 22, 0, 0, 20, 3];
+            config = localExposureCountConfig();
+            config.preserveOrder = false;
+
+            actual = writing_plan_v2_from_generated_data(data, config);
+
+            testCase.verifyEqual(actual.x_mm, [22; 22; 22; 11; 11]);
+            testCase.verifyEqual(actual.z_mm, [0; 0; 0; 0.5; 0.5], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(actual.power, [20; 20; 20; 10; 10]);
+            testCase.verifyEqual(actual.dwell_s, repmat(200e-6, 5, 1), ...
+                'AbsTol', 1e-15);
+        end
+
+        function exposureCountColumnDoesNotBecomePauseColumn(testCase)
+            data = [0, 0, 0, 25, 2];
+            config = localExposureCountConfig();
+            config.pauseSeconds = 0.37;
+
+            actual = writing_plan_v2_from_generated_data(data, config);
+
+            testCase.verifyEqual(actual.pause_s, [0.37; 0.37], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(actual.dwell_s, repmat(200e-6, 2, 1), ...
+                'AbsTol', 1e-15);
+        end
+
+        function invalidPerRowExposureCountsAreRejected(testCase)
+            invalidCounts = [0, -1, 1.5, NaN, Inf];
+            config = localExposureCountConfig();
+
+            for iCase = 1:numel(invalidCounts)
+                data = [0, 0, 0, 25, invalidCounts(iCase)];
+                testCase.verifyError( ...
+                    @() writing_plan_v2_from_generated_data(data, config), ...
+                    'writingPlanV2:InvalidExposureCount');
+            end
+        end
+
+        function missingExposureCountColumnIsRejected(testCase)
+            data = [0, 0, 0, 25, 2];
+            config = localExposureCountConfig();
+            config.exposureCountColumn = 6;
+
+            testCase.verifyError( ...
+                @() writing_plan_v2_from_generated_data(data, config), ...
+                'writingPlanV2:MissingExposureCountColumn');
+        end
+
+        function invalidExposureCountColumnIndexIsRejected(testCase)
+            data = [0, 0, 0, 25, 2];
+            invalidColumns = [0, 1.5, NaN, Inf];
+
+            for iCase = 1:numel(invalidColumns)
+                config = localExposureCountConfig();
+                config.exposureCountColumn = invalidColumns(iCase);
+                testCase.verifyError( ...
+                    @() writing_plan_v2_from_generated_data(data, config), ...
+                    'writingPlanV2:InvalidDataColumn');
+            end
+        end
+
         function generatedAxisPathsBuildSingleSegmentGroups(testCase)
             data = [0, 0, 0, 25; 1, 0, 0.5, 30];
             config = struct( ...
@@ -280,6 +359,17 @@ config = struct( ...
     'scanSpeedMmPerSecond', 0.01, ...
     'sourceRecipe', "cartesian_axis_path", ...
     'preserveOrder', false);
+end
+
+function config = localExposureCountConfig()
+config = struct( ...
+    'profile', "point", ...
+    'pauseSeconds', 0.125, ...
+    'dwellSeconds', 200e-6, ...
+    'exposuresPerPoint', 99, ...
+    'exposureCountColumn', 5, ...
+    'sourceRecipe', "single_exposure_count_matrix", ...
+    'preserveOrder', true);
 end
 
 function plan = localLegacyPlan(modeValue, rowCount)
