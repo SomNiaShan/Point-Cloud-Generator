@@ -146,7 +146,7 @@ ui.PitchXYField = hexPitchFields(1);
 ui.PitchZHexField = hexPitchFields(2);
 
 [ui.OriginPanel, originFields] = createValuePanel( ...
-    latticeGrid, 'Origin (mm)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, -0.0175], tips.origin);
+    latticeGrid, 'Origin (mm)', {'Origin X', 'Origin Y', 'Origin Z'}, [0, 0, 0], tips.origin);
 ui.OriginPanel.Layout.Row = 5;
 ui.OriginXField = originFields(1);
 ui.OriginYField = originFields(2);

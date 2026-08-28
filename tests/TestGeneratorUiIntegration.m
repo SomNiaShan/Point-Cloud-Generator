@@ -12,6 +12,9 @@ classdef TestGeneratorUiIntegration < matlab.unittest.TestCase
             testCase.verifyEqual(string(generatorTab.Title), "Generator");
             testCase.verifyEqual(string(patternTab.Title), "Excel Pattern");
             testCase.verifyEmpty(findall(fig, 'Title', 'Writing Settings'));
+            testCase.verifyEqual(appUi.OriginZField.Value, 0);
+            testCase.verifyEqual(appUi.ZPushOriginZField.Value, 0);
+            testCase.verifyEqual(appUi.PatternOriginZField.Value, 0);
 
             generator = testCase.localTagged(appUi, 'generator-type');
             exposure = testCase.localTagged(appUi, 'exposure-mode');
