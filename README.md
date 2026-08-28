@@ -15,6 +15,44 @@ Standalone MATLAB point-cloud generator used by the laser writing workflow.
 2. Make sure the Current Folder is the repository root.
 3. Run `point_cloud_generator_app`.
 
+## Scan Parameter Matrix
+
+Choose `Scan Parameter Matrix` under `Generator Type` to process a grid of
+separate test regions in one writing plan. The physical and parameter layout
+is deliberately aligned:
+
+- Rows advance along +Y and linearly sweep scan speed from `Start` to `End`.
+- Columns advance along +X and linearly sweep power from `P Start` to `P End`.
+- Every speed-power combination is one region containing an `Nx`-by-`Ny`
+  array of scan anchors. `Patch Pitch` controls anchor spacing and `Gap`
+  controls the blank edge-to-edge spacing between regions.
+- `Origin X/Y/Z`, scan axis, direction, anchor, length, lead-in, lead-out, and
+  pre-write pause are shared geometry/motion settings. The per-row speed and
+  per-column power are written explicitly to every relevant Writing Plan row.
+- Axis scans default to 0.005 mm laser-off lead-in and lead-out. These segments
+  use that region's scan speed so acceleration and deceleration happen outside
+  the exposed line; adjust both distances under `Writing Settings` as needed.
+
+The generator forces `Axis scan` exposure for this mode. A single speed row or
+power column is allowed; in that case the corresponding `Start` value is used.
+
+## Point Dwell Parameter Matrix
+
+Choose `Point Dwell Parameter Matrix` to test point exposure conditions across
+multiple regions:
+
+- Rows advance along +Y and linearly sweep point dwell time from `Start` to
+  `End`.
+- Columns advance along +X and linearly sweep power from `P Start` to `P End`.
+- Every dwell-power combination is one region containing an `Nx`-by-`Ny`
+  point array. Pitch, region gap, origin, exposures per point, and pre-write
+  pause remain independently configurable.
+- The dwell time and power are stored explicitly on every point operation in
+  the Writing Plan.
+
+This mode forces `Point dwell` exposure. A single dwell row or power column is
+allowed and uses its corresponding `Start` value.
+
 ## Excel Recipe Patterns
 
 Open the top-level `Excel Pattern` tab to convert an `.xlsx` worksheet into

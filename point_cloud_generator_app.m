@@ -63,8 +63,8 @@ powerOrderTab.Scrollable = 'on';
 patternTab = uitab(controlTabs, 'Title', 'Excel Pattern');
 patternTab.Scrollable = 'on';
 
-latticeTabGrid = uigridlayout(latticeTab, [34, 1]);
-latticeTabGrid.RowHeight = repmat({'fit'}, 1, 34);
+latticeTabGrid = uigridlayout(latticeTab, [38, 1]);
+latticeTabGrid.RowHeight = repmat({'fit'}, 1, 38);
 latticeTabGrid.ColumnWidth = {'1x'};
 latticeTabGrid.Padding = [6, 6, 6, 6];
 latticeTabGrid.RowSpacing = 4;
@@ -87,7 +87,8 @@ ui = struct();
 
 latticeGrid = latticeTabGrid;
 
-latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Segmented Grating', 'Z Push', ...
+latticeTypeItems = {'Cartesian', 'Hex', 'HCP', 'Staircase', 'Scan Parameter Matrix', ...
+    'Point Dwell Parameter Matrix', 'Segmented Grating', 'Z Push', ...
     'Hexagon Cut', 'Hexagon Release Cut', 'Hexagon Release Cut Array', 'Circle Release Cut'};
 [ui.LatticeTypeRow, ui.LatticeTypeDropDown] = createDropdownRow( ...
     latticeGrid, 'Generator Type', latticeTypeItems, 'Hexagon Release Cut', @onLatticeTypeChanged, ...
@@ -141,6 +142,47 @@ ui.PowerColumnsPanel.Layout.Row = 8;
 ui.NPowersField = powerColumnFields(1);
 ui.StaircasePowerStartField = powerColumnFields(2);
 ui.StaircasePowerEndField = powerColumnFields(3);
+
+[ui.ScanTestSpeedPanel, scanTestSpeedFields] = createValuePanel( ...
+    latticeGrid, 'Scan Speed Rows', {'Speed Count', 'Start (mm/s)', 'End (mm/s)'}, ...
+    [5, 0.005, 0.025], tips.scanTestSpeed);
+ui.ScanTestSpeedPanel.Layout.Row = 35;
+ui.ScanTestSpeedCountField = scanTestSpeedFields(1);
+ui.ScanTestSpeedStartField = scanTestSpeedFields(2);
+ui.ScanTestSpeedEndField = scanTestSpeedFields(3);
+for scanTestField = scanTestSpeedFields
+    scanTestField.ValueChangedFcn = @onStaircaseParamChanged;
+end
+
+ui.ScanTestHintLabel = uilabel(latticeGrid, ...
+    'Text', ['Parameter layout: scan speed changes by row (+Y), power changes by column (+X). ', ...
+        'Each matrix cell is one region containing the configured Nx-by-Ny scan anchors. ', ...
+        'Laser-off lead-in/out defaults to 0.005 mm and can be adjusted under Writing Settings.'], ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.25, 0.25, 0.25]);
+ui.ScanTestHintLabel.Layout.Row = 36;
+ui.ScanTestHintLabel.Layout.Column = 1;
+applyTooltip({ui.ScanTestHintLabel}, tips.scanTestLayout);
+
+[ui.DwellTestTimePanel, dwellTestTimeFields] = createValuePanel( ...
+    latticeGrid, 'Point Dwell Rows', {'Dwell Count', 'Start (s)', 'End (s)'}, ...
+    [5, 0.05, 0.25], tips.dwellTestTime);
+ui.DwellTestTimePanel.Layout.Row = 37;
+ui.DwellTestCountField = dwellTestTimeFields(1);
+ui.DwellTestStartField = dwellTestTimeFields(2);
+ui.DwellTestEndField = dwellTestTimeFields(3);
+for dwellTestField = dwellTestTimeFields
+    dwellTestField.ValueChangedFcn = @onStaircaseParamChanged;
+end
+
+ui.DwellTestHintLabel = uilabel(latticeGrid, ...
+    'Text', ['Parameter layout: point dwell time changes by row (+Y), power changes by column (+X). ', ...
+        'Each matrix cell is one region containing the configured Nx-by-Ny dwell points.'], ...
+    'WordWrap', 'on', ...
+    'FontColor', [0.25, 0.25, 0.25]);
+ui.DwellTestHintLabel.Layout.Row = 38;
+ui.DwellTestHintLabel.Layout.Column = 1;
+applyTooltip({ui.DwellTestHintLabel}, tips.dwellTestLayout);
 
 [ui.PatchCountsPanel, patchCountFields] = createValuePanel( ...
     latticeGrid, 'Patch Counts', {'Nx', 'Ny'}, [5, 5], tips.patchCounts);
@@ -616,11 +658,11 @@ ui.ScanLengthField.ValueChangedFcn = @onPlanParamChanged;
 ui.ScanSpeedRow.Layout.Row = 8;
 ui.ScanSpeedField.ValueChangedFcn = @onPlanParamChanged;
 
-[ui.ScanLeadInRow, ui.ScanLeadInField] = createNumericRow(planGrid, 'Lead-in (mm)', 0, tips.scanLeadIn);
+[ui.ScanLeadInRow, ui.ScanLeadInField] = createNumericRow(planGrid, 'Lead-in (mm)', 0.005, tips.scanLeadIn);
 ui.ScanLeadInRow.Layout.Row = 9;
 ui.ScanLeadInField.ValueChangedFcn = @onPlanParamChanged;
 
-[ui.ScanLeadOutRow, ui.ScanLeadOutField] = createNumericRow(planGrid, 'Lead-out (mm)', 0, tips.scanLeadOut);
+[ui.ScanLeadOutRow, ui.ScanLeadOutField] = createNumericRow(planGrid, 'Lead-out (mm)', 0.005, tips.scanLeadOut);
 ui.ScanLeadOutRow.Layout.Row = 10;
 ui.ScanLeadOutField.ValueChangedFcn = @onPlanParamChanged;
 
@@ -804,6 +846,8 @@ applyCompactFonts(fig);
 
         latticeType = string(ui.LatticeTypeDropDown.Value);
         isStaircase = latticeType == "Staircase";
+        isScanTestMatrix = latticeType == "Scan Parameter Matrix";
+        isDwellTestMatrix = latticeType == "Point Dwell Parameter Matrix";
         isGrating = latticeType == "Segmented Grating";
         isZPush = latticeType == "Z Push";
         isHexCut = latticeType == "Hexagon Cut";
@@ -814,7 +858,7 @@ applyCompactFonts(fig);
         isReleaseMode = isHexReleaseMode || isCircleReleaseCut;
         isCutMode = isHexCut || isReleaseMode;
         showHexGeometry = isHexCut || isHexReleaseMode;
-        isFixedOrder = isStaircase || isGrating || isZPush || isCutMode;
+        isFixedOrder = isStaircase || isScanTestMatrix || isDwellTestMatrix || isGrating || isZPush || isCutMode;
         showCartesian = latticeType == "Cartesian";
         showHexPitch = latticeType == "Hex" || latticeType == "HCP";
         showHcpShift = latticeType == "HCP";
@@ -822,13 +866,14 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 2, ui.CountsPanel, 'fit', ~isFixedOrder);
         setPanelRow(latticeGrid, 3, ui.CartesianPitchPanel, 'fit', showCartesian);
         setPanelRow(latticeGrid, 4, ui.HexPitchPanel, 'fit', showHexPitch);
-        setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ~isStaircase && ~isZPush && ~isCutMode);
+        setPanelRow(latticeGrid, 5, ui.OriginPanel, 'fit', ...
+            (~isStaircase && ~isZPush && ~isCutMode) || isScanTestMatrix || isDwellTestMatrix);
         setPanelRow(latticeGrid, 6, ui.HcpShiftPanel, 'fit', showHcpShift);
         setPanelRow(latticeGrid, 7, ui.StepConfigPanel, 'fit', isStaircase);
-        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', isStaircase);
-        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 'fit', isStaircase);
-        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 'fit', isStaircase);
-        setPanelRow(latticeGrid, 11, ui.GapPanel, 'fit', isStaircase);
+        setPanelRow(latticeGrid, 8, ui.PowerColumnsPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
+        setPanelRow(latticeGrid, 9, ui.PatchCountsPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
+        setPanelRow(latticeGrid, 10, ui.PatchPitchPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
+        setPanelRow(latticeGrid, 11, ui.GapPanel, 'fit', isStaircase || isScanTestMatrix || isDwellTestMatrix);
         setPanelRow(latticeGrid, 12, ui.StaircaseOriginPanel, 'fit', isStaircase);
         setPanelRow(latticeGrid, 13, ui.GratingAxesPanel, 'fit', isGrating);
         setPanelRow(latticeGrid, 14, ui.GratingDepthPanel, 'fit', isGrating);
@@ -874,17 +919,27 @@ applyCompactFonts(fig);
         setPanelRow(latticeGrid, 32, ui.HexReleaseOrderRow, 'fit', isReleaseMode);
         setPanelRow(latticeGrid, 33, ui.HexArraySizePanel, 'fit', isHexReleaseArray);
         setPanelRow(latticeGrid, 34, ui.HexArraySelectionPanel, hexArraySelectionPanelHeight(validateHexArrayDimension(ui.HexArrayRowsField.Value)), isHexReleaseArray);
+        setPanelRow(latticeGrid, 35, ui.ScanTestSpeedPanel, 'fit', isScanTestMatrix);
+        setPanelRow(latticeGrid, 36, ui.ScanTestHintLabel, 'fit', isScanTestMatrix);
+        setPanelRow(latticeGrid, 37, ui.DwellTestTimePanel, 'fit', isDwellTestMatrix);
+        setPanelRow(latticeGrid, 38, ui.DwellTestHintLabel, 'fit', isDwellTestMatrix);
 
-        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ~isStaircase && ~isCutMode);
+        setPanelRow(powerOrderGrid, 1, ui.PowerPanel, 'fit', ...
+            ~isStaircase && ~isScanTestMatrix && ~isDwellTestMatrix && ~isCutMode);
         setPanelRow(powerOrderGrid, 2, ui.OrderingPanel, 'fit', true);
         setPanelRow(orderingGrid, 2, ui.PathModeRow, 'fit', ~isFixedOrder);
         setPanelRow(powerOrderGrid, 3, ui.PlanPanel, 'fit', ~isCutMode);
         if ~isExcelPatternMode()
             configurePreviewMode(false);
         end
-        if isGrating
+        if isGrating || isScanTestMatrix
             ui.ExposureModeDropDown.Value = 'Axis scan';
-            syncGratingScanAxis();
+            if isGrating
+                syncGratingScanAxis();
+            end
+            onPlanParamChanged();
+        elseif isDwellTestMatrix
+            ui.ExposureModeDropDown.Value = 'Point dwell';
             onPlanParamChanged();
         elseif isZPush
             ui.ExposureModeDropDown.Value = 'Point dwell';
@@ -957,25 +1012,29 @@ applyCompactFonts(fig);
 
     function onPlanParamChanged(~, ~)
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
+        isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
+        isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         if isExcelPatternMode()
             return;
         end
-        if isGrating
+        if isGrating || isScanTestMatrix
             ui.ExposureModeDropDown.Value = 'Axis scan';
-            syncGratingScanAxis();
-        elseif isZPush
+            if isGrating
+                syncGratingScanAxis();
+            end
+        elseif isZPush || isDwellTestMatrix
             ui.ExposureModeDropDown.Value = 'Point dwell';
         end
 
         isScan = string(ui.ExposureModeDropDown.Value) == "Axis scan";
-        setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ~isScan);
+        setPanelRow(planGrid, 2, ui.DwellSecondsRow, 'fit', ~isScan && ~isDwellTestMatrix);
         setPanelRow(planGrid, 3, ui.PointExposureCountRow, 'fit', ~isScan);
         setPanelRow(planGrid, 4, ui.ScanAxisRow, 'fit', isScan && ~isGrating);
         setPanelRow(planGrid, 5, ui.ScanDirectionRow, 'fit', isScan);
         setPanelRow(planGrid, 6, ui.ScanAnchorRow, 'fit', isScan);
         setPanelRow(planGrid, 7, ui.ScanLengthRow, 'fit', isScan && ~isGrating);
-        setPanelRow(planGrid, 8, ui.ScanSpeedRow, 'fit', isScan);
+        setPanelRow(planGrid, 8, ui.ScanSpeedRow, 'fit', isScan && ~isScanTestMatrix);
         setPanelRow(planGrid, 9, ui.ScanLeadInRow, 'fit', isScan);
         setPanelRow(planGrid, 10, ui.ScanLeadOutRow, 'fit', isScan);
         setPanelRow(planGrid, 11, ui.PauseSecondsRow, 'fit', ~isZPush);
@@ -2287,7 +2346,35 @@ applyCompactFonts(fig);
         params.lattice.type = latticeType;
         params.lattice.displayDistanceUnit = 'mm';
 
-        if latticeType == "Staircase"
+        if latticeType == "Point Dwell Parameter Matrix"
+            params.lattice.nDwells = round(max(1, ui.DwellTestCountField.Value));
+            params.lattice.dwellStartSeconds = ui.DwellTestStartField.Value;
+            params.lattice.dwellEndSeconds = ui.DwellTestEndField.Value;
+            params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
+            params.lattice.powerStart = ui.StaircasePowerStartField.Value;
+            params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
+            params.lattice.patchNx = round(max(1, ui.PatchNxField.Value));
+            params.lattice.patchNy = round(max(1, ui.PatchNyField.Value));
+            params.lattice.patchPitchXUm = mmToUm(ui.PatchPitchXField.Value);
+            params.lattice.patchPitchYUm = mmToUm(ui.PatchPitchYField.Value);
+            params.lattice.gapXUm = mmToUm(ui.GapXField.Value);
+            params.lattice.gapYUm = mmToUm(ui.GapYField.Value);
+            params.lattice.originUm = mmToUm([ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value]);
+        elseif latticeType == "Scan Parameter Matrix"
+            params.lattice.nSpeeds = round(max(1, ui.ScanTestSpeedCountField.Value));
+            params.lattice.speedStartMmPerSecond = ui.ScanTestSpeedStartField.Value;
+            params.lattice.speedEndMmPerSecond = ui.ScanTestSpeedEndField.Value;
+            params.lattice.nPowers = round(max(1, ui.NPowersField.Value));
+            params.lattice.powerStart = ui.StaircasePowerStartField.Value;
+            params.lattice.powerEnd = ui.StaircasePowerEndField.Value;
+            params.lattice.patchNx = round(max(1, ui.PatchNxField.Value));
+            params.lattice.patchNy = round(max(1, ui.PatchNyField.Value));
+            params.lattice.patchPitchXUm = mmToUm(ui.PatchPitchXField.Value);
+            params.lattice.patchPitchYUm = mmToUm(ui.PatchPitchYField.Value);
+            params.lattice.gapXUm = mmToUm(ui.GapXField.Value);
+            params.lattice.gapYUm = mmToUm(ui.GapYField.Value);
+            params.lattice.originUm = mmToUm([ui.OriginXField.Value, ui.OriginYField.Value, ui.OriginZField.Value]);
+        elseif latticeType == "Staircase"
             params.lattice.nDepths = round(max(1, ui.NDepthsField.Value));
             params.lattice.zStartUm = mmToUm(ui.ZStartField.Value);
             params.lattice.zStepUm = mmToUm(ui.ZStepField.Value);
@@ -2499,6 +2586,8 @@ applyCompactFonts(fig);
 
     function planConfig = collectPlanConfig()
         isGrating = string(ui.LatticeTypeDropDown.Value) == "Segmented Grating";
+        isScanTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Scan Parameter Matrix";
+        isDwellTestMatrix = string(ui.LatticeTypeDropDown.Value) == "Point Dwell Parameter Matrix";
         isZPush = string(ui.LatticeTypeDropDown.Value) == "Z Push";
         isHexCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Cut";
         isHexReleaseCut = string(ui.LatticeTypeDropDown.Value) == "Hexagon Release Cut";
@@ -2512,7 +2601,12 @@ applyCompactFonts(fig);
         else
             planConfig.profile = "axis_path";
         end
-        planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
+        if isDwellTestMatrix
+            planConfig.dwellSeconds = validatePositiveScalar(ui.DwellTestStartField.Value, 'Dwell start');
+            planConfig.dwellColumn = 5;
+        else
+            planConfig.dwellSeconds = validateNonnegativeScalar(ui.DwellSecondsField.Value, 'Dwell time');
+        end
         planConfig.exposuresPerPoint = validatePositiveInteger(ui.PointExposureCountField.Value, 'Exposures per point');
         ui.PointExposureCountField.Value = planConfig.exposuresPerPoint;
         planConfig.scanAxis = string(ui.ScanAxisDropDown.Value);
@@ -2523,7 +2617,13 @@ applyCompactFonts(fig);
         else
             planConfig.scanLengthUm = mmToUm(validatePositiveScalar(ui.ScanLengthField.Value, 'Scan length'));
         end
-        planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
+        if isScanTestMatrix
+            planConfig.scanSpeedMmPerSecond = validatePositiveScalar( ...
+                ui.ScanTestSpeedStartField.Value, 'Scan speed start');
+            planConfig.scanSpeedColumn = 5;
+        else
+            planConfig.scanSpeedMmPerSecond = validatePositiveScalar(ui.ScanSpeedField.Value, 'Scan speed');
+        end
         planConfig.scanLeadInMm = validateNonnegativeScalar(ui.ScanLeadInField.Value, 'Scan lead-in');
         planConfig.scanLeadOutMm = validateNonnegativeScalar(ui.ScanLeadOutField.Value, 'Scan lead-out');
         planConfig.pauseSeconds = validateNonnegativeScalar(ui.PauseSecondsField.Value, 'Pause time');
@@ -2533,6 +2633,10 @@ applyCompactFonts(fig);
         if isGrating
             planConfig.profile = "axis_path";
             planConfig.scanAxis = inferredGratingScanAxis();
+        elseif isScanTestMatrix
+            planConfig.profile = "axis_path";
+        elseif isDwellTestMatrix
+            planConfig.profile = "point";
         elseif isZPush
             planConfig.profile = "point";
         elseif isCutMode
@@ -2584,6 +2688,14 @@ applyCompactFonts(fig);
             colorTable.x_mm, colorTable.y_mm, colorTable.z_mm, ...
             12, colorTable.power, 'filled');
         sc.DataTipTemplate.DataTipRows(end).Label = 'Power';
+        if any(isfinite(colorTable.speed_mm_s))
+            sc.DataTipTemplate.DataTipRows(end + 1) = dataTipTextRow( ...
+                'Scan speed (mm/s)', colorTable.speed_mm_s);
+        end
+        if any(isfinite(colorTable.dwell_s))
+            sc.DataTipTemplate.DataTipRows(end + 1) = dataTipTextRow( ...
+                'Dwell (s)', colorTable.dwell_s);
+        end
 
         hold(ui.PreviewAxes, 'off');
         grid(ui.PreviewAxes, 'on');
@@ -2616,6 +2728,15 @@ applyCompactFonts(fig);
             plotNote = '3D preview shows all operations in writing order.';
         end
 
+        speedRangeText = '';
+        if isfield(summary, 'scanSpeedRange') && numel(summary.scanSpeedRange) == 2
+            speedRangeText = sprintf(' | Scan speed range: %.6g to %.6g mm/s', ...
+                summary.scanSpeedRange(1), summary.scanSpeedRange(2));
+        end
+        if isfield(summary, 'dwellRange') && numel(summary.dwellRange) == 2
+            speedRangeText = [speedRangeText, sprintf(' | Dwell range: %.6g to %.6g s', ...
+                summary.dwellRange(1), summary.dwellRange(2))];
+        end
         if isfield(summary, 'fileHint') && strlength(string(summary.fileHint)) > 0
             ui.FileHintLabel.Text = char(summary.fileHint);
         else
@@ -2627,13 +2748,13 @@ applyCompactFonts(fig);
             'Traversal: %s | Path: %s | Power: %s\n', ...
             '%s\n', ...
             'X range: %.4f to %.4f mm | Y range: %.4f to %.4f mm\n', ...
-            'Z range: %.4f to %.4f mm | Power range: %.2f to %.2f\n', ...
+            'Z range: %.4f to %.4f mm | Power range: %.2f to %.2f%s\n', ...
             '%s table shows only the first %d rows.'], ...
             pointCount, pathGroupCount, pathSegmentCount, summary.pointCount, summary.sourcePointCount, summary.latticeLabel, ...
             summary.layerTraversalLabel, summary.pathModeLabel, summary.powerModeLabel, ...
             summary.pitchLabel, ...
             min(boundsX), max(boundsX), min(boundsY), max(boundsY), min(boundsZ), max(boundsZ), ...
-            summary.powerRange(1), summary.powerRange(2), ...
+            summary.powerRange(1), summary.powerRange(2), speedRangeText, ...
             plotNote, previewRows);
     end
 
@@ -2720,6 +2841,28 @@ applyCompactFonts(fig);
                 detailText = sprintf('Selected %d/%d honeycomb cell(s). %s', selectedCount, totalCount, detailText);
             end
             ui.TraversalNoteLabel.Text = ['Traversal: ', detailText];
+            return;
+        end
+
+        if latticeType == "Scan Parameter Matrix"
+            speedCount = round(max(1, ui.ScanTestSpeedCountField.Value));
+            powerCount = round(max(1, ui.NPowersField.Value));
+            ui.TraversalNoteLabel.Text = sprintf([ ...
+                'Traversal: %d speed row(s) from %.6g to %.6g mm/s along +Y; ', ...
+                '%d power column(s) from %.6g to %.6g along +X; row-major anchors within each region.'], ...
+                speedCount, ui.ScanTestSpeedStartField.Value, ui.ScanTestSpeedEndField.Value, ...
+                powerCount, ui.StaircasePowerStartField.Value, ui.StaircasePowerEndField.Value);
+            return;
+        end
+
+        if latticeType == "Point Dwell Parameter Matrix"
+            dwellCount = round(max(1, ui.DwellTestCountField.Value));
+            powerCount = round(max(1, ui.NPowersField.Value));
+            ui.TraversalNoteLabel.Text = sprintf([ ...
+                'Traversal: %d dwell-time row(s) from %.6g to %.6g s along +Y; ', ...
+                '%d power column(s) from %.6g to %.6g along +X; row-major points within each region.'], ...
+                dwellCount, ui.DwellTestStartField.Value, ui.DwellTestEndField.Value, ...
+                powerCount, ui.StaircasePowerStartField.Value, ui.StaircasePowerEndField.Value);
             return;
         end
 
@@ -2948,18 +3091,30 @@ tips.stepConfig = { ...
     'Z coordinate of the first Staircase layer, in mm.', ...
     'Z step between adjacent depth layers, in mm; smaller Z is deeper.'};
 tips.powerColumns = { ...
-    'Number of power columns in Staircase mode.', ...
-    'Power value used by the first Staircase column.', ...
-    'Power value used by the last Staircase column; intermediate columns are interpolated linearly.'};
+    'Number of power columns in Staircase or either Parameter Matrix mode.', ...
+    'Power value used by the first column.', ...
+    'Power value used by the last column; intermediate columns are interpolated linearly.'};
+tips.scanTestSpeed = { ...
+    'Number of scan-speed rows in the parameter matrix.', ...
+    'Scan speed used by the first matrix row, in mm/s; must be positive.', ...
+    'Scan speed used by the last matrix row, in mm/s; intermediate rows are interpolated linearly.'};
+tips.scanTestLayout = ['Each speed-power combination occupies one separate XY region. ', ...
+    'The Writing Plan stores the selected speed and power on every exposed scan and its optional lead segments.'];
+tips.dwellTestTime = { ...
+    'Number of point-dwell-time rows in the parameter matrix.', ...
+    'Point dwell time used by the first matrix row, in seconds; must be positive.', ...
+    'Point dwell time used by the last matrix row, in seconds; intermediate rows are interpolated linearly.'};
+tips.dwellTestLayout = ['Each dwell-power combination occupies one separate XY region. ', ...
+    'The Writing Plan stores the selected dwell time and power on every point operation.'];
 tips.patchCounts = { ...
-    'Number of points along X in each Staircase patch.', ...
-    'Number of points along Y in each Staircase patch.'};
+    'Number of scan anchors along X in each Staircase patch or parameter-test region.', ...
+    'Number of scan anchors along Y in each Staircase patch or parameter-test region.'};
 tips.patchPitch = { ...
-    'X spacing inside each Staircase patch, in mm.', ...
-    'Y spacing inside each Staircase patch, in mm.'};
+    'X spacing between anchors inside each patch or test region, in mm.', ...
+    'Y spacing between anchors inside each patch or test region, in mm.'};
 tips.gap = { ...
-    'Blank X gap between adjacent Staircase patches, in mm.', ...
-    'Blank Y gap between adjacent Staircase patches, in mm.'};
+    'Blank X gap between adjacent patches or test regions, in mm.', ...
+    'Blank Y gap between adjacent patches or test regions, in mm.'};
 tips.staircaseOrigin = { ...
     'Overall Staircase array X origin or offset, in mm.', ...
     'Overall Staircase array Y origin or offset, in mm.'};
@@ -3058,10 +3213,10 @@ tips.scanDirection = 'Axis scans move from the start point in the positive or ne
 tips.scanAnchor = 'Centered on point means the scan segment is centered on the source point; start at point means the source point is the scan start.';
 tips.scanLength = 'Length of each axis scan, in mm.';
 tips.scanSpeed = 'Stage speed during axis scans, in mm/s.';
-tips.scanLeadIn = ['Laser-off travel immediately before the exposed scan, in mm. ', ...
-    'It uses the scan speed and does not change the exposed scan length or anchor.'];
+tips.scanLeadIn = ['Laser-off travel immediately before the exposed scan, in mm. Default 0.005 mm. ', ...
+    'It uses the scan speed so the stage reaches stable motion before exposure, and does not change the exposed scan length or anchor.'];
 tips.scanLeadOut = ['Laser-off travel immediately after the exposed scan, in mm. ', ...
-    'It uses the scan speed and does not change the exposed scan length or anchor.'];
+    'Default 0.005 mm; it uses the scan speed so deceleration occurs after exposure, and does not change the exposed scan length or anchor.'];
 tips.pauseSeconds = ['Settling time after the stage reaches a point or the start of a scan group, ', ...
     'including any lead-in, before exposure or scanning, in seconds.'];
 tips.patternFile = ['Choose a macro-free .xlsx workbook. Select the worksheet containing only the rectangular ', ...

@@ -12,6 +12,14 @@ if latticeTypeStr == "staircase"
     [data, prefix, summary] = localGenerateStaircaseFull(lattice);
     return;
 end
+if latticeTypeStr == "scan_parameter_matrix"
+    [data, prefix, summary] = localGenerateScanParameterMatrixFull(lattice);
+    return;
+end
+if latticeTypeStr == "point_dwell_parameter_matrix"
+    [data, prefix, summary] = localGeneratePointDwellParameterMatrixFull(lattice);
+    return;
+end
 if latticeTypeStr == "segmented_grating"
     power = localRequireStruct(params, 'power');
     [data, prefix, summary] = localGenerateSegmentedGratingFull(lattice, power);
@@ -95,6 +103,193 @@ summary.pathModeLabel = localPathModeLabel(pathMode);
 summary.powerMode = char(powerMode);
 summary.powerModeLabel = localPowerModeLabel(powerMode);
 summary.layerTraversalLabel = 'Deep to shallow (ascending Z; smaller Z is deeper)';
+summary.prefix = prefix;
+end
+
+function [data, prefix, summary] = localGenerateScanParameterMatrixFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
+
+nSpeeds = localPositiveInteger(localRequireField(lattice, 'nSpeeds'), 'Speed Count');
+speedStart = localPositiveScalar(localRequireField(lattice, 'speedStartMmPerSecond'), 'Speed start');
+speedEnd = localPositiveScalar(localRequireField(lattice, 'speedEndMmPerSecond'), 'Speed end');
+nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
+powerStart = localNonnegativeScalar(localRequireField(lattice, 'powerStart'), 'Power start');
+powerEnd = localNonnegativeScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
+
+patchNx = localPositiveInteger(localRequireField(lattice, 'patchNx'), 'Region Nx');
+patchNy = localPositiveInteger(localRequireField(lattice, 'patchNy'), 'Region Ny');
+pitchXUm = localPositiveScalar(localRequireField(lattice, 'patchPitchXUm'), 'Region Pitch X');
+pitchYUm = localPositiveScalar(localRequireField(lattice, 'patchPitchYUm'), 'Region Pitch Y');
+gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Region Gap X');
+gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Region Gap Y');
+originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
+
+if nSpeeds == 1
+    speedRows = speedStart;
+else
+    speedRows = linspace(speedStart, speedEnd, nSpeeds);
+end
+if nPowers == 1
+    powerColumns = powerStart;
+else
+    powerColumns = linspace(powerStart, powerEnd, nPowers);
+end
+
+patchWidthUm = (patchNx - 1) * pitchXUm;
+patchHeightUm = (patchNy - 1) * pitchYUm;
+strideXUm = patchWidthUm + gapXUm;
+strideYUm = patchHeightUm + gapYUm;
+pointsPerRegion = patchNx * patchNy;
+totalPoints = nSpeeds * nPowers * pointsPerRegion;
+
+xUm = zeros(totalPoints, 1);
+yUm = zeros(totalPoints, 1);
+zUm = repmat(originUm(3), totalPoints, 1);
+powerValues = zeros(totalPoints, 1);
+speedValues = zeros(totalPoints, 1);
+cursor = 1;
+
+% The physical layout is a parameter map: power increases by column and
+% scan speed increases by row.  Within a region, anchors are row-major.
+for iSpeed = 1:nSpeeds
+    regionYUm = originUm(2) + (iSpeed - 1) * strideYUm;
+    for iPower = 1:nPowers
+        regionXUm = originUm(1) + (iPower - 1) * strideXUm;
+        for iPatchRow = 1:patchNy
+            rows = cursor:(cursor + patchNx - 1);
+            xUm(rows) = regionXUm + (0:patchNx - 1).' * pitchXUm;
+            yUm(rows) = regionYUm + (iPatchRow - 1) * pitchYUm;
+            powerValues(rows) = powerColumns(iPower);
+            speedValues(rows) = speedRows(iSpeed);
+            cursor = cursor + patchNx;
+        end
+    end
+end
+
+data = [xUm / 1000, yUm / 1000, zUm / 1000, powerValues, speedValues];
+prefix = sprintf('scan_matrix_S_%s_to_%s_%d_rows_P_%s_to_%s_%d_cols_%dx%d', ...
+    localCompactNumber(speedStart), localCompactNumber(speedEnd), nSpeeds, ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd), nPowers, ...
+    patchNx, patchNy);
+
+summary = struct();
+summary.pointCount = totalPoints;
+summary.sourcePointCount = totalPoints;
+summary.xRangeMm = [min(data(:, 1)), max(data(:, 1))];
+summary.yRangeMm = [min(data(:, 2)), max(data(:, 2))];
+summary.zRangeMm = [min(data(:, 3)), max(data(:, 3))];
+summary.powerRange = [min(powerValues), max(powerValues)];
+summary.scanSpeedRange = [min(speedValues), max(speedValues)];
+summary.latticeType = 'scan_parameter_matrix';
+summary.latticeLabel = sprintf('Scan Parameter Matrix (%d speed rows x %d power columns)', nSpeeds, nPowers);
+summary.pitchLabel = sprintf('Region %dx%d anchors, pitch %s / %s %s, gap %s / %s %s', ...
+    patchNx, patchNy, localCompactDistance(pitchXUm, displayUnit), ...
+    localCompactDistance(pitchYUm, displayUnit), unitText, ...
+    localCompactDistance(gapXUm, displayUnit), localCompactDistance(gapYUm, displayUnit), unitText);
+summary.rowSpacingUm = pitchYUm;
+summary.regionMode = 'parameter_matrix';
+summary.regionLabel = 'One region per speed-power pair';
+summary.pathMode = 'parameter_matrix';
+summary.pathModeLabel = 'Speed rows, power columns, row-major within each region';
+summary.powerMode = 'matrix_columns';
+summary.powerModeLabel = sprintf('%d columns from %s to %s', nPowers, ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd));
+summary.layerTraversalLabel = sprintf('%d scan-speed rows from %s to %s mm/s', nSpeeds, ...
+    localCompactNumber(speedStart), localCompactNumber(speedEnd));
+summary.prefix = prefix;
+end
+
+function [data, prefix, summary] = localGeneratePointDwellParameterMatrixFull(lattice)
+displayUnit = localDisplayDistanceUnit(lattice);
+unitText = localDistanceUnitText(displayUnit);
+
+nDwells = localPositiveInteger(localRequireField(lattice, 'nDwells'), 'Dwell Count');
+dwellStart = localPositiveScalar(localRequireField(lattice, 'dwellStartSeconds'), 'Dwell start');
+dwellEnd = localPositiveScalar(localRequireField(lattice, 'dwellEndSeconds'), 'Dwell end');
+nPowers = localPositiveInteger(localRequireField(lattice, 'nPowers'), 'Power Count');
+powerStart = localNonnegativeScalar(localRequireField(lattice, 'powerStart'), 'Power start');
+powerEnd = localNonnegativeScalar(localRequireField(lattice, 'powerEnd'), 'Power end');
+
+patchNx = localPositiveInteger(localRequireField(lattice, 'patchNx'), 'Region Nx');
+patchNy = localPositiveInteger(localRequireField(lattice, 'patchNy'), 'Region Ny');
+pitchXUm = localPositiveScalar(localRequireField(lattice, 'patchPitchXUm'), 'Region Pitch X');
+pitchYUm = localPositiveScalar(localRequireField(lattice, 'patchPitchYUm'), 'Region Pitch Y');
+gapXUm = localNonnegativeScalar(localRequireField(lattice, 'gapXUm'), 'Region Gap X');
+gapYUm = localNonnegativeScalar(localRequireField(lattice, 'gapYUm'), 'Region Gap Y');
+originUm = localVector3(localFieldOrDefault(lattice, 'originUm', [0, 0, 0]), 'Origin');
+
+if nDwells == 1
+    dwellRows = dwellStart;
+else
+    dwellRows = linspace(dwellStart, dwellEnd, nDwells);
+end
+if nPowers == 1
+    powerColumns = powerStart;
+else
+    powerColumns = linspace(powerStart, powerEnd, nPowers);
+end
+
+patchWidthUm = (patchNx - 1) * pitchXUm;
+patchHeightUm = (patchNy - 1) * pitchYUm;
+strideXUm = patchWidthUm + gapXUm;
+strideYUm = patchHeightUm + gapYUm;
+pointsPerRegion = patchNx * patchNy;
+totalPoints = nDwells * nPowers * pointsPerRegion;
+
+xUm = zeros(totalPoints, 1);
+yUm = zeros(totalPoints, 1);
+zUm = repmat(originUm(3), totalPoints, 1);
+powerValues = zeros(totalPoints, 1);
+dwellValues = zeros(totalPoints, 1);
+cursor = 1;
+
+% Dwell time increases by physical row and power increases by column.
+for iDwell = 1:nDwells
+    regionYUm = originUm(2) + (iDwell - 1) * strideYUm;
+    for iPower = 1:nPowers
+        regionXUm = originUm(1) + (iPower - 1) * strideXUm;
+        for iPatchRow = 1:patchNy
+            rows = cursor:(cursor + patchNx - 1);
+            xUm(rows) = regionXUm + (0:patchNx - 1).' * pitchXUm;
+            yUm(rows) = regionYUm + (iPatchRow - 1) * pitchYUm;
+            powerValues(rows) = powerColumns(iPower);
+            dwellValues(rows) = dwellRows(iDwell);
+            cursor = cursor + patchNx;
+        end
+    end
+end
+
+data = [xUm / 1000, yUm / 1000, zUm / 1000, powerValues, dwellValues];
+prefix = sprintf('dwell_matrix_T_%s_to_%s_%d_rows_P_%s_to_%s_%d_cols_%dx%d', ...
+    localCompactNumber(dwellStart), localCompactNumber(dwellEnd), nDwells, ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd), nPowers, ...
+    patchNx, patchNy);
+
+summary = struct();
+summary.pointCount = totalPoints;
+summary.sourcePointCount = totalPoints;
+summary.xRangeMm = [min(data(:, 1)), max(data(:, 1))];
+summary.yRangeMm = [min(data(:, 2)), max(data(:, 2))];
+summary.zRangeMm = [min(data(:, 3)), max(data(:, 3))];
+summary.powerRange = [min(powerValues), max(powerValues)];
+summary.dwellRange = [min(dwellValues), max(dwellValues)];
+summary.latticeType = 'point_dwell_parameter_matrix';
+summary.latticeLabel = sprintf('Point Dwell Parameter Matrix (%d dwell rows x %d power columns)', nDwells, nPowers);
+summary.pitchLabel = sprintf('Region %dx%d points, pitch %s / %s %s, gap %s / %s %s', ...
+    patchNx, patchNy, localCompactDistance(pitchXUm, displayUnit), ...
+    localCompactDistance(pitchYUm, displayUnit), unitText, ...
+    localCompactDistance(gapXUm, displayUnit), localCompactDistance(gapYUm, displayUnit), unitText);
+summary.rowSpacingUm = pitchYUm;
+summary.regionMode = 'parameter_matrix';
+summary.regionLabel = 'One region per dwell-power pair';
+summary.pathMode = 'parameter_matrix';
+summary.pathModeLabel = 'Dwell rows, power columns, row-major within each region';
+summary.powerMode = 'matrix_columns';
+summary.powerModeLabel = sprintf('%d columns from %s to %s', nPowers, ...
+    localCompactNumber(powerStart), localCompactNumber(powerEnd));
+summary.layerTraversalLabel = sprintf('%d dwell-time rows from %s to %s s', nDwells, ...
+    localCompactNumber(dwellStart), localCompactNumber(dwellEnd));
 summary.prefix = prefix;
 end
 

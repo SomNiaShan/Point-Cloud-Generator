@@ -78,6 +78,26 @@ classdef TestWritingPlanV2 < matlab.unittest.TestCase
             testCase.verifyEqual(actual.z_mm, [0; 0; 0.5; 0.5]);
         end
 
+        function generatedPointsAcceptPerRegionDwellTimes(testCase)
+            data = [0, 0, 0, 10, 0.05; 1, 0, 0, 20, 0.25];
+            config = struct( ...
+                'profile', "point", ...
+                'pauseSeconds', 0.1, ...
+                'dwellSeconds', 0.01, ...
+                'dwellColumn', 5, ...
+                'exposuresPerPoint', 2, ...
+                'sourceRecipe', "dwell_matrix", ...
+                'preserveOrder', true);
+
+            actual = writing_plan_v2_from_generated_data(data, config);
+
+            testCase.verifyEqual(actual.dwell_s, [0.05; 0.05; 0.25; 0.25], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(actual.power, [10; 10; 20; 20]);
+            testCase.verifyEqual(actual.pause_s, repmat(0.1, 4, 1), ...
+                'AbsTol', 1e-12);
+        end
+
         function generatedAxisPathsBuildSingleSegmentGroups(testCase)
             data = [0, 0, 0, 25; 1, 0, 0.5, 30];
             config = struct( ...
@@ -98,6 +118,25 @@ classdef TestWritingPlanV2 < matlab.unittest.TestCase
             testCase.verifyEqual(actual.segment_index, [1; 1]);
             testCase.verifyEqual(actual.laser_state, ["on"; "on"]);
             testCase.verifyEqual(actual.x2_mm - actual.x_mm, [0.1; 0.1], ...
+                'AbsTol', 1e-12);
+        end
+
+        function generatedAxisPathsAcceptPerRegionScanSpeeds(testCase)
+            data = [0, 0, 0, 10, 0.01; 1, 0, 0, 20, 0.03];
+            config = localAxisConfig();
+            config.scanSpeedColumn = 5;
+            config.pauseSeconds = 0.2;
+            config.scanLeadInMm = 0.01;
+            config.scanLeadOutMm = 0.02;
+
+            actual = writing_plan_v2_from_generated_data(data, config);
+
+            testCase.verifyEqual(actual.speed_mm_s, [ ...
+                repmat(0.01, 3, 1); repmat(0.03, 3, 1)], ...
+                'AbsTol', 1e-12);
+            testCase.verifyEqual(actual.power, [ ...
+                repmat(10, 3, 1); repmat(20, 3, 1)]);
+            testCase.verifyEqual(actual.pause_s, repmat(0.2, 6, 1), ...
                 'AbsTol', 1e-12);
         end
 

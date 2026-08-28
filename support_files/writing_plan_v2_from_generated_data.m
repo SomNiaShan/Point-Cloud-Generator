@@ -25,12 +25,13 @@ end
 
 function planTable = localPointPlan(data, config)
 rowCount = size(data, 1);
-pauseSeconds = localPauseValues(data, config.pauseSeconds);
+pauseSeconds = localPauseValues(data, config);
+dwellSeconds = localDwellValues(data, config);
 planTable = localPlanTable( ...
     repmat("point", rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), ...
     repmat("dwell", rowCount, 1), data(:, 1), data(:, 2), data(:, 3), ...
     nan(rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), nan(rowCount, 1), ...
-    data(:, 4), repmat(config.dwellSeconds, rowCount, 1), pauseSeconds, ...
+    data(:, 4), dwellSeconds, pauseSeconds, ...
     repmat(string(config.sourceRecipe), rowCount, 1));
 planTable = localSortOperations(planTable, config);
 if config.exposuresPerPoint > 1
@@ -41,6 +42,7 @@ end
 
 function planTable = localAxisPathPlan(data, config)
 rowCount = size(data, 1);
+scanSpeed = localScanSpeedValues(data, config);
 startCoordinates = data(:, 1:3);
 endCoordinates = startCoordinates;
 axisIndex = find(["X", "Y", "Z"] == upper(string(config.scanAxis)), 1);
@@ -68,8 +70,8 @@ exposurePlan = localPlanTable( ...
     repmat("on", rowCount, 1), ...
     startCoordinates(:, 1), startCoordinates(:, 2), startCoordinates(:, 3), ...
     endCoordinates(:, 1), endCoordinates(:, 2), endCoordinates(:, 3), ...
-    repmat(config.scanSpeedMmPerSecond, rowCount, 1), data(:, 4), ...
-    nan(rowCount, 1), localPauseValues(data, config.pauseSeconds), ...
+    scanSpeed, data(:, 4), ...
+    nan(rowCount, 1), localPauseValues(data, config), ...
     repmat(string(config.sourceRecipe), rowCount, 1));
 exposurePlan = localSortOperations(exposurePlan, config);
 
@@ -236,14 +238,62 @@ block = localPlanTable( ...
     repmat(pauseSeconds(1), outputCount, 1), repmat(string(sourceRecipe), outputCount, 1));
 end
 
-function pauseSeconds = localPauseValues(data, defaultValue)
-pauseSeconds = repmat(defaultValue, size(data, 1), 1);
-if size(data, 2) >= 5
+function pauseSeconds = localPauseValues(data, config)
+pauseSeconds = repmat(config.pauseSeconds, size(data, 1), 1);
+scanSpeedColumn = localOptionalColumn(config, 'scanSpeedColumn');
+dwellColumn = localOptionalColumn(config, 'dwellColumn');
+if size(data, 2) >= 5 && scanSpeedColumn ~= 5 && dwellColumn ~= 5
     pauseSeconds = data(:, 5);
 end
 if any(~isfinite(pauseSeconds) | pauseSeconds < 0)
     error('Generated pause values must be finite nonnegative numbers.');
 end
+end
+
+function dwellValues = localDwellValues(data, config)
+dwellColumn = localOptionalColumn(config, 'dwellColumn');
+if isnan(dwellColumn)
+    dwellValues = repmat(config.dwellSeconds, size(data, 1), 1);
+elseif dwellColumn > size(data, 2)
+    error('writingPlanV2:MissingDwellColumn', ...
+        'Generated data does not contain configured dwell-time column %d.', dwellColumn);
+else
+    dwellValues = data(:, dwellColumn);
+end
+if any(~isfinite(dwellValues) | dwellValues < 0)
+    error('writingPlanV2:InvalidDwellTime', ...
+        'Generated dwell-time values must be finite nonnegative numbers.');
+end
+end
+
+function speedValues = localScanSpeedValues(data, config)
+scanSpeedColumn = localOptionalColumn(config, 'scanSpeedColumn');
+if isnan(scanSpeedColumn)
+    speedValues = repmat(config.scanSpeedMmPerSecond, size(data, 1), 1);
+elseif scanSpeedColumn > size(data, 2)
+    error('writingPlanV2:MissingScanSpeedColumn', ...
+        'Generated data does not contain configured scan-speed column %d.', scanSpeedColumn);
+else
+    speedValues = data(:, scanSpeedColumn);
+end
+if any(~isfinite(speedValues) | speedValues <= 0)
+    error('writingPlanV2:InvalidScanSpeed', ...
+        'Generated scan-speed values must be finite positive numbers.');
+end
+end
+
+function columnIndex = localOptionalColumn(config, fieldName)
+columnIndex = nan;
+if ~isfield(config, fieldName) || isempty(config.(fieldName))
+    return;
+end
+columnIndex = config.(fieldName);
+if ~(isscalar(columnIndex) && isnumeric(columnIndex) && isfinite(columnIndex) && ...
+        columnIndex >= 1 && columnIndex == round(columnIndex))
+    error('writingPlanV2:InvalidDataColumn', ...
+        '%s must be a positive integer column index.', fieldName);
+end
+columnIndex = double(columnIndex);
 end
 
 function planTable = localSortOperations(planTable, config)
